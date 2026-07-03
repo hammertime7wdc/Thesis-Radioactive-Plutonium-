@@ -1,0 +1,525 @@
+CHAPTER 3
+METHODOLOGY
+This chapter presents the methodological framework used to design, develop, and evaluate
+QualCheck. All methodological choices were made in response to the gaps found in literature reviewed, starting with using BERT-base-uncased As the encoding backbone to the
+adoption of a rubric-referenced three-class classification scheme. The chapter discusses the
+research design, the mathematical and algorithms that form the framework of the system,
+materials and assessment models Their uses were discussed, and the theoretical bases that
+underlie the design principles.
+Research Design
+This study employed the Constructive Research Design, a research approach commonly
+used in computer science and information technology studies that focus on designing and
+developing a practical solution to an existing problem. Constructive research emphasizes
+the creation of a functional artifact or system intended to address identified limitations in
+current practices. In this study, the construct developed is QualCheck: A Rubric-Guided
+Semantic Evaluation System for Academic Responses and Code Reports Using Natural
+Language Processing (NLP). The system was designed to address the limitations of existing automated grading tools that primarily rely on keyword matching and lack rubricguided semantic evaluation across different academic output formats. Through the integration of transformer-based language models, semantic similarity scoring, and rubric-based
+relevance classification, QualCheck aims to provide a more consistent, interpretable, and
+semantically aware assessment process for academic responses.
+The study focused on the design, development, and evaluation of the QualCheck system
+32
+using a structured and systematic process. A labeled academic response dataset composed
+of short answers, essays, and code reports served as the basis dataset for threshold calibration and evaluation of the semantic classification process. Short answers consisted of
+approximately 1–3 sentences or fewer than 100 words, essays contained multiple paragraphs or exceeded 100 words requiring analytical discussion, while code reports referred
+to technical written explanations accompanying programming outputs. The system development process included rubric construction, dataset organization, BERT-based encoding,
+cosine similarity computation, and relevance classification into Fully Relevant, Partially
+Relevant, and Irrelevant categories. The effectiveness of the system was evaluated using
+classification accuracy, semantic alignment scoring, and reliability measures to determine
+whether the proposed construct provided a clear, organized, and pedagogically meaningful
+automated assessment process.
+Theorems, Algorithms, and Mathematical Framework
+In this section, the algorithms and mathematical models of the computational core of the
+QualCheck system are discussed in detail. This system is based on three components that
+are all interrelated, and they include transformer-based language encoding with the usage
+of BERT, calculation of semantic scoring by the use of cosine similarity, and a rubric-based
+classification algorithm to classify relevance.
+Bidirectional Encoder Representations from Transformers (BERT)
+BERT is a language model based on transformers trained on large text collections that
+learn deep contextual representations of words by attending to both right and left context
+of each word in a sequence at the same time [3]. In contrast to previous unidirectional
+models, BERT has a self-attention mechanism, where each token in the input focuses on
+all the other tokens in the input, generating embeddings that encode rich semantic and
+33
+contextual information. It has been established that BERT-based models are always better
+than baseline neural networks in automated academic scoring tasks, and their benefits are
+language and domain-independent [9].
+BERT is used as an encoding backbone in QualCheck. Suppose the input sequence of
+text T = {t1, t2, . . . , tn} is fed through BERT to generate a contextual embedding matrix
+H = {h1, h2, . . . , hn}, with each hx being a 768-dimensional vector in the case of BERTbase. The special [CLS] token at the start of every input sequence yields a representation
+at the sentence level h[CLS] that captures the meaning of the whole input. This sentencelevel embedding is obtained on the academic prompt as well as on the student response and
+presented as an input in the similarity computation step, where the components are defined
+as follows:
+1. T — the input sequence of text tokens {t1, t2, . . . , tn} representing either the academic prompt or the student response fed into BERT.
+2. H — the contextual embedding matrix {h1, h2, . . . , hn} produced by BERT, where
+each hx is a 768-dimensional vector in the case of BERT-base encoding the contextual meaning of each token.
+3. [CLS] token — a special token prepended to every input sequence whose final
+hidden state h[CLS] serves as a sentence-level representation capturing the overall
+meaning of the entire input.
+The self-attention mechanism at the core of BERT computes attention scores between
+all token pairs using the Scaled Dot-Product Attention formula introduced by Vaswani et
+al. [2017] [12]:
+Attention(Q, K, V ) = softmax 
+QKT
+√
+dk
+
+V (3.1)
+where the components are defined as follows:
+34
+• Q (Query) — a linear projection of the input embeddings representing what information is being searched for in the sequence.
+• K (Key) — a linear projection that represents the information each token offers, used
+to match against the Query to compute relevance scores.
+• V (Value) — a linear projection that holds the actual content to be aggregated,
+weighted by the attention scores computed from Q and K.
+• dk — the dimension of the key vectors, used as a scaling factor to prevent excessively
+large dot products that would push the softmax into regions of very small gradients
+[12].
+This process helps BERT to capture long-range dependencies and nuanced semantic associations in the text, which is crucial to encode academic information written using different
+vocabulary correctly.
+Cosine Similarity
+Following the encoding of student response into fixed-size vector representations by
+BERT, the extent of semantic alignment between the two is quantified with Cosine Similarity. Cosine similarity is a distance measure that quantifies the similarity of two vectors in a
+high-dimensional space by the cosine of the angle between the two vectors, not the distance
+between the two vectors, which is especially useful in semantic embedding comparisons
+where the meaning of the direction of a vector is encoded in its direction.[8]
+Given a prompt embedding vector P and a student response embedding vector R, both
+derived from the BERT [CLS] output, the cosine similarity score s is defined as:
+s(P, R) = P · R
+∥P∥∥R∥
+(3.2)
+where the components are defined as follows:
+35
+• P — the question embedding vector derived from the BERT [CLS] output of the
+academic question.
+• R — the response embedding vector derived from the BERT [CLS] output of the
+student response.
+• P · R — the dot product of the two vectors, measuring their directional alignment in
+the embedding space.
+• ∥P∥ and ∥R∥ — the respective Euclidean (L2) norms of each vector, used to normalize the dot product so that the result is independent of vector magnitude [8].
+The similarity score results are in the range [−1, 1]. A score of about 1 indicates high
+semantic alignment; a score of about 0 implies that there is low semantic overlap; and
+a negative score implies opposing semantic directions. Regarding academic evaluation,
+scores would be within the range [0, 1] as academic responses and their questions are linked
+to each other with positive semantics [2].
+Rubric-Based Relevance Classification Algorithm
+After the computation of the cosine similarity scores, QualCheck uses a threshold-based
+classification algorithm, which is determined by a rubric, to classify the student response
+into one of three categories of relevance. The classification operation C(s) is formally
+given as:
+C(s) =
+
+
+
+Fully Relevant if s ≥ θ1
+Partially Relevant if θ2 ≤ s < θ1
+Irrelevant if s < θ2
+(3.3)
+where the components are defined as follows:
+• s — the cosine similarity score computed between the questions embedding vector
+P and the student response embedding vector R.
+36
+• θ1 — the upper threshold value that defines the boundary between Fully Relevant and
+Partially Relevant classifications.
+• θ2 — the lower threshold value that defines the boundary between Partially Relevant
+and Irrelevant classifications.
+These thresholds are calibrated and optimized during the system evaluation phase using
+the labeled validation dataset. Threshold selection identifies the values of θ1 and θ2 that
+maximize classification accuracy and F1-score across the three relevance categories on the
+validation set[13].
+The three relevance categories are the levels of rubric performance, which are determined by the instructor. An answer that is Fully Relevant is conceptually aligned with the
+prompt and meets the rubric standards at the highest level. A Partially Relevant response
+gives the answer to a certain part of the question but is not complete or thorough. An Irrelevant response does not respond to the academic question or rubric. The categorization
+based on this rubric will allow the automated evaluation output to be reliable to the assessment standards set by the instructors and offer students meaningful and interpretable
+feedback on the quality of their responses.
+Materials and Evaluation Methods
+Instrument
+The main data gathering tool of this paper is the Labeled. Academic Response Dataset is
+a structured dataset which is a collection of academic. prompts, student responses, rubric
+descriptors and human assigned. relevance labels that are used to train, validate and test
+the QualCheck system. The data set is compiled using three benchmark corpora that are
+publicly available. correlating to the three types of academic output that QualCheck is.
+designed to evaluate.
+37
+In the case of short answers, the study uses the data of the SciEntsBank dataset, which
+has 4,969 student responses to 135 questions across 12 subjects domains[4]. The relevance
+labels are human-assigned and are used to serve as data.as ground truth to train and assess
+the relevance of QualCheck. pipeline of classification in different subject areas. For essay responses, The research uses DREsS a dataset of rubric based scoring of essay corpus.
+that offers graded essays that are assessed in various ways such as especially well-suited,
+because it consists of content, organization and language. to the semantic evaluation framework using rubric guided by QualCheck to conduct semantic evaluation.[14].For the code
+report component, a synthetic dataset and corresponding rubric will be developed by the
+researchers due to the absence of publicly available datasets that contain both code report
+explanations and structured rubric-based evaluation labels. The synthetic dataset will be
+carefully constructed to reflect realistic programming assignments and accompanying documentation typically found in computer science courses. A rubric will also designed to
+evaluate key dimensions such as conceptual understanding, explanation clarity, methodological correctness, and technical coherence. To ensure validity and reduce potential
+bias, a rigorous validation process will be conducted on both the dataset and rubric. This
+involved iterative reviews and refinements by the researchers, as well as cross-checking
+against academic standards in programming course assessments. Final verification and approval of the synthetic dataset and rubric were secured through signed validation letters
+from designated Computer Science and Computer Science Studies (CCS) instructors to
+ensure academic reliability and fairness.
+Dataset Entry Structure. The dataset instrument is organized into four fields: (1) an
+academic prompt or task instruction, (2) a student response to the prompt, (3) a rubric descriptor, describing what a response should be to be considered Fullerly Relevant, (3) and
+(4) an assigned relevance label, which is a Fully Relevant, Partially Relevant or Irrelevant
+response. The rubric descriptors were developed to reflect real world expectations of instructors on computer science courses at tertiary level, including conceptual knowledge,
+38
+description of methods, and readability of code documentation.
+Procedure/Process
+39
+Figure 1: Qualcheck: FlowChart Pipeline
+40
+The development and evaluation of QualCheck follows a structured five-phase pipeline,
+as illustrated in Figure Figure 1. Each phase corresponds to a specific research objective
+and produces outputs that serve as direct inputs to the subsequent phase, ensuring a coherent
+and reproducible workflow from data preparation through system evaluation.
+Phase 1: Data Collection and Preparation. The dataset was compiled from three corpora corresponding to the three supported academic output types. Short answer responses
+were drawn from the complete SciEntsBank corpus, comprising 4,969 student responses
+across 135 questions in 12 subject domains. Essay responses were sourced from the complete DREsS dataset, a large-scale rubric-based essay scoring corpus consisting of three
+sub-datasets: DREsS New, containing 2,279 expert-scored essays from English as a Foreign Language (EFL) learners; DREsS Std, containing 6,515 essays drawn from existing
+datasets; and DREsS CASE, containing 40,185 synthetic essay samples, yielding a combined total of 48,979 essay entries evaluated across content, organization, and language
+dimensions. For code reports, a synthetic dataset of 10,000 entries was constructed by the
+researchers, accompanied by a purpose-built rubric assessing conceptual understanding, explanation clarity, methodological correctness, and technical coherence, given the absence
+of publicly available corpora with rubric-labeled code documentation. The validity of the
+synthetic dataset and rubric was established through iterative expert review and confirmed
+via signed validation letters from designated Computer Science faculty. All collected text
+was preprocessed using NLTK and spaCy, encompassing tokenization, lowercasing, stopword removal, and lemmatization to normalize inputs across all three output types. Each
+dataset entry consists of four structured fields (1) an academic prompt or task instruction,
+(2) a student response to the prompt, (3) a rubric descriptor specifying the criteria for full
+relevance, and (4) an assigned relevance label (Fully Relevant, Partially Relevant, or Irrelevant) assigned by qualified raters following a standardized labeling protocol.The finalized
+dataset was partitioned into training (70%), validation (15%), and test (15%) subsets using
+stratified random sampling to ensure proportional representation of all three relevance cate-
+41
+gories across all splits. The training subset was used exclusively for fine-tuning the BERTbase-uncased model. The validation subset was utilized for the calibration of classification
+thresholds θ1 and θ2, as well as for monitoring fine-tuning performance to prevent overfitting. The test subset served as the held-out set for the final evaluation of the QualCheck
+system’s performance and generalizability.
+Phase 2: BERT Encoding and Embedding Generation. Each academic prompt, rubric
+descriptor, and student response was encoded using the pretrained BERT-base-uncased
+transformer model. The combined prompt-rubric input was formatted using the standard
+BERT multi-segment structure as: [CLS] prompt [SEP] rubric [SEP], and the student
+response was encoded separately as: [CLS] response [SEP]. Both inputs were processed
+through the 12-layer BERT-base-uncased architecture to produce 768-dimensional contextual embeddings extracted from the final hidden state of the [CLS] token. These sentencelevel embeddings served as the vector representations P (for the combined prompt-rubric
+input) and R (for the student response), which were subsequently used in the cosine similarity computation defined in Equation 3.2.The model was fine-tuned on the training subset
+using a standard supervised fine-tuning procedure with the AdamW optimizer, a learning
+rate of 2e-5, and a maximum of 5 training epochs with early stopping based on validation
+loss. Fine-tuning was conducted to adapt the model’s contextual representations to the specific linguistic patterns and rubric-defined relevance criteria present in academic responses
+across all three supported output types.
+Phase 3: Cosine Similarity Scoring. For each prompt-response pair in the dataset, semantic alignment was quantified by computing the cosine similarity between the BERT
+[CLS] embeddings P and R using the formula defined in Equation 3.2. The resulting
+similarity score s ∈ [0, 1] represents the continuous semantic alignment score for the pair,
+where values approaching 1 indicate high conceptual correspondence and values approaching 0 indicate minimal semantic overlap. All computed similarity scores were stored systematically for use in the threshold calibration and relevance classification procedures of
+42
+Phase 4.
+Phase 4: Threshold Calibration and Relevance Classification. The two relevance classification thresholds, θ1 and θ2, were determined through an exhaustive grid search conducted
+on the validation set. Candidate threshold pairs were evaluated at a step size of 0.01 across
+the full range of observed cosine similarity scores. The pair that maximized the weighted
+average of the Weighted F1-Score and overall classification accuracy on the validation set
+was selected as the operational thresholds. These calibrated thresholds were then applied to
+the held-out test set using the rubric-based classification function C(s) defined in Equation
+3.3, assigning each student response to one of three relevance categories: Fully Relevant
+(s ≥ θ1), Partially Relevant (θ2 ≤ s < θ1), or Irrelevant (s < θ2). These categories align
+with rubric-defined performance levels established by the instructors, ensuring that the automated classification output remains criterion-referenced and pedagogically interpretable.
+Phase 5: System Evaluation. QualCheck was evaluated on the held-out test set across
+three primary dimensions: classification performance, semantic alignment scoring quality,
+and cross-output-type consistency. Classification performance was assessed using a multiclass confusion matrix from which Overall Accuracy, Precision, Recall, macro-average
+F1-Score, and Weighted F1-Score were derived per output type and in aggregate, with a
+minimum Weighted F1-Score of 0.80 set as the viability threshold. Semantic alignment
+scoring quality was measured using Mean Absolute Error (MAE) and Root Mean Square
+Error (RMSE), computed between QualCheck’s continuous cosine similarity scores and
+normalized human rubric ratings. Score-level agreement between automated and human
+assessments was further quantified using the Pearson Correlation Coefficient (r), with a
+target threshold of r ≥ 0.70. Cross-output-type consistency was examined through a oneway ANOVA, supplemented by Tukey HSD post-hoc tests where statistically significant
+differences were identified (p ≤ 0.05). Descriptive statistics including mean, median, standard deviation, and interquartile range were computed per output type and per relevance
+class, with score distributions visualized using histograms and box plots to assess class
+43
+separability. All results were further compared against two baseline systems: Baseline 1, a
+TF-IDF cosine similarity approach without BERT or rubric integration, representing conventional keyword-matching methods; and Baseline 2, a BERT cosine similarity approach
+without rubric-based threshold classification, representing single-component transformer
+approaches. Improvements over both baselines were reported as delta values (∆Weighted
+F1-Score and ∆MAE) to quantify the contribution of QualCheck’s rubric-guided unified
+evaluation pipeline.
+The materials used in this study include the hardware infrastructure, software libraries, pre-trained language model, and dataset resources required to design, develop, and
+evaluate the QualCheck prototype system. Each material is selected based on its specific
+role within the semantic evaluation pipeline described in the preceding sections of this
+chapter.
+Hardware Specifications
+The development and testing of the QualCheck system was carried out on a workstation
+that meets or exceeds the minimum hardware specifications presented in Table Table 1.
+These specifications are established in direct reference to the computational demands of the
+BERT-base-uncased transformer model, which generates 768-dimensional contextual embeddings for each input sequence and requires sufficient GPU memory to process batches
+of academic response pairs efficiently. As shown in Table Table 1, both the local and remote development environments are equipped with dedicated GPUs, which are particularly
+critical for this study. The BERT encoder generates a 768-dimensional [CLS] token embedding for each input sequence, and the QualCheck pipeline encodes both the combined
+prompt-rubric representation and the student response separately for every sample in the
+dataset. GPU-accelerated inference significantly reduces per-sample encoding time compared to CPU-only processing, making iterative threshold calibration and batch evaluation
+computationally feasible within the scope of this study.
+44
+Table 1
+Hardware Specifications for QualCheck Development and Testing
+Component Local Machine Remote Server
+Processor (CPU) AMD Ryzen 5 6600H Intel Xeon Silver 4309Y (32 cores) @ 3.600GHz
+RAM 16 GB 128 GB (47 GB allocated)
+GPU NVIDIA RTX 3050 4x NVIDIA RTX A5000
+Operating System Windows 11 Ubuntu 22.04.5 LTS x86 64
+Software Specifications
+The software stack of the QualCheck system encompasses the operating system environment, the Python programming language, all third-party libraries and frameworks, and the
+pre-trained language model. Each software component is selected for its specific functional
+role in the system pipeline and its compatibility with the hardware specifications described
+above.
+Table 2
+Software Specifications for QualCheck Development
+Software Component Version License Purpose in QualCheck
+Python 3.10+ (64-bit) PSF License Primary language for all modules
+Python Dependencies requirements.txt Various ML, NLP, stats, and visualization
+BERT-base-uncased Pre-trained Apache 2.0 Core language model for encoding
+Visual Studio Code Latest stable MIT License Primary development IDE
+Git Latest stable GPL v2 Version control and management
+Operating Environment. QualCheck will be developed and tested on a 64-bit operating system environment (Windows 10/11 or Ubuntu 20.04 LTS). CUDA Toolkit 11.8 or
+higher is required to enable PyTorch GPU support, and the NVIDIA GPU driver must be
+version 450.x or higher for CUDA 11.8 compatibility. All Python dependencies will be
+45
+managed using a dedicated virtual environment to ensure reproducibility, as summarized
+in Table Table 2.
+Pre-Trained Model Specification. The BERT base-uncased model comprises 12 transformer encoder layers, 12 attention heads per layer, a hidden size of 768 dimensions, and
+approximately 110 million parameters. It produces a 768-dimensional [CLS] token embedding for each input sequence, which serves as the sentence-level semantic representation used in the cosine similarity scoring formula s(P, R) = P·R
+∥P∥∥R∥
+as defined in Equation Equation 3.2 of this chapter. The model is fine-tuned on the labeled academic response
+dataset using supervised training on the three supported output types short answers, essays,
+and code reports to adapt its contextual representations to the domain-specific requirements
+of rubric-guided semantic evaluation. Fine-tuning enables the model to generate embeddings more precisely calibrated to academic language patterns and rubric-defined relevance
+criteria than general purpose pretraining alone
+Statistical test
+The following statistical tests will be applied to evaluate the performance, reliability, and
+consistency of QualCheck. Each test was selected for its appropriateness to the multi-class
+classification task, inter-rater reliability assessment, and cross-group comparison requirements of the four research questions.
+• Pearson Correlation Coefficient (r) — Score-Level Agreement. Pearson’s r will
+be computed between QualCheck’s continuous cosine similarity scores and humanassigned ordinal scores (Irrelevant = 0, Partially Relevant = 1, Fully Relevant = 2) to
+quantify the linear relationship between automated and human assessments. A strong
+positive correlation of r ≥ 0.70 is the target threshold.
+• One-Way ANOVA + Tukey HSD — Cross-Output-Type Consistency. A one-way
+ANOVA will determine whether classification performance is statistically compa-
+46
+rable across the three output types (short answers, essays, code reports). A nonsignificant result (p > 0.05) supports performance consistency. Where significant
+differences are found (p ≤ 0.05), Tukey HSD post-hoc tests will identify the specific
+output type pair responsible.
+• Descriptive Statistics — Score Distribution Analysis. Mean, median, standard deviation, and interquartile range will be computed on cosine similarity scores per output
+type and per relevance class, with score distributions visualized using histograms and
+box plots to examine class separability and support threshold selection.
+Evaluation methods
+QualCheck will be evaluated along three primary dimensions: classification performance, semantic alignment scoring quality, and cross-output-type reliability. Classification
+Performance Evaluation. A multi-class confusion matrix will be used to derive the metrics
+in Table 5 per class and in aggregate. A minimum Weighted F1-Score of 0.80 is set as the
+viability threshold, consistent with benchmarks in comparable AES systems from the reviewed literature. The confusion matrix will be produced per output type and in aggregate
+to reveal systematic misclassification patterns.
+• Overall Accuracy
+– Formula: (T P + T N)/N
+– Purpose in QualCheck Evaluation: Proportion of all correctly classified responses across all three categories
+• Precision (per class)
+– Formula: T P/(T P + F P)
+– Purpose in QualCheck Evaluation: Correct proportion among responses assigned to a given category
+47
+• Recall (per class)
+– Formula: T P/(T P + F N)
+– Purpose in QualCheck Evaluation: Correct proportion among responses truly
+belonging to a given category
+• F1-Score (macro avg)
+– Formula: 2 × (P × R)/(P + R)
+– Purpose in QualCheck Evaluation: Harmonic mean treating all classes equally
+regardless of frequency
+• Weighted F1-Score
+– Formula: P(supporti
+/N) × F1i
+– Purpose in QualCheck Evaluation: Primary benchmark metric; accounts for
+class imbalance (target ≥ 0.80)
+Semantic Alignment Scoring Evaluation. MAE and RMSE will assess the quality of continuous cosine similarity scores against human rubric scores. MAE = (1/n)
+P|yˆi − yi
+|
+and RMSE =
+p
+(1/n)
+P(ˆyi − yi)
+2
+, where yˆi
+is QualCheck’s cosine similarity score and
+yi
+is the normalized human rubric rating. Both metrics will be reported per output type and
+in aggregate.
+Baseline Comparison Evaluation. Results will be compared against Baseline 1 (TF-IDF
+cosine similarity without BERT or rubric integration, representing the keyword-matching
+approaches critiqued in Chapter 1) and Baseline 2 (BERT cosine similarity without rubricbased thresholding, representing single-component transformer approaches from Chapter
+2). Improvements in Weighted F1-Score and MAE will be reported as delta values (∆) to
+quantify the contribution of QualCheck’s rubric-guided unified pipeline.
+48
+Collectively, the materials, instrument, procedure, sampling technique, statistical tests,
+and evaluation methods described in this section constitute a rigorous and integrated empirical framework for the QualCheck study. Each component directly addresses the research
+questions and objectives from Chapter 1, operationalizes the algorithms and mathematical
+framework from this chapter’s preceding sections, and fills the methodological gaps identified in the reviewed literature of Chapter 2. The multi-metric, multi-output evaluation
+design ensures that the claims made for QualCheck, specifically regarding its classification
+accuracy, semantic scoring quality, rubric alignment, and cross-output generalizability, are
+supported by appropriate and transparent quantitative evidence.
+Theoretical Framework
+The theoretical framework of this study is grounded on the established body of literature
+on automated academic assessment, natural language processing, and rubric-based evaluation. These theories collectively explain why the research problem under study exists and
+provide the scientific basis for the development of QualCheck as a rubric-guided semantic
+evaluation system.
+49
+Theory of
+Automated
+Essay Scoring
+Theory of
+Natural Language
+Processing
+Theory of
+TransformerBased
+Language
+Models
+Theory of
+Rubric-Based
+Assessment
+Theory of
+Semantic
+Similarity
+Measurement
+Multi-Output
+Evaluation
+Semantic
+Content Analysis BERT-Based
+Encoding
+Rubric-Guided
+Classification
+Cosine Similarity
+Scoring
+QualCheck
+A Rubric-Guided Semantic Evaluation System
+for Academic Responses and Code Reports
+Figure 2: Theoretical Framework of QualCheck
+Theory of Automated Essay Scoring (AES).Automated Essay Scoring (AES) is defined
+as the application of computing systems to receive and mark written academic assignments
+using the analysis of the linguistic, semantic, and structural characteristics of the work,
+which minimizes the human assessment through the time-consuming manual method of
+grading [7]. The systematic review of deep learning-based approaches to AES revealed
+that the area has evolved past the initial rule-based and statistical models to deeper semantic relations captured by transformer-based models, with specific increases in reliability
+and consistency in scoring student writing [10]. A wider review of AES issues, methods,
+and future perspectives established that the transition to end-to-end deep learning representations has become the overwhelming trend in the field, despite domain generalisation
+and interpretability issues continuing to be actively researched [15]. This theory explains
+the existence of the research problem because it demonstrates that while automated scoring systems have significantly advanced, the majority of existing systems are configured to
+assess only one type of academic output, most often essays, and cannot support the entire
+variety of academic outputs that students write in various courses and disciplines [10, 15,
+50
+5]. Computer science and other technical students are producing short answers, essays, and
+code reports on a regular basis in the same course, yet no clearly shown unified automated
+assessment infrastructure performs all three types of outputs on the same semantic evaluation pipeline. The AES theory provides the basis for developing QualCheck as a system
+that extends automated scoring to cover short answers, essays, and code reports within a
+single unified framework.
+Theory of natural language processing, Natural Language Processing (NLP) refers to
+a sub-domain of artificial intelligence which allows the programmed computer to process,
+analyse, and comprehend the human language with the help of identifying patterns, associations, and meanings within text messages, which helps in classifying texts, finding semantically similar texts, and retrieving information [10]. With NLP techniques, automated
+systems are able to go beyond basic word matching and are able to analyze the semantic
+content of student responses. With this development, automated grading systems can find
+out whether an answer conceptually matches the desired question or the goal of learning
+[10].
+Initial studies of automated essay scoring concentrated more on statistical and rulebased methods which considered measurable textual characteristics like word frequency,
+sentence length, and lexical similarity. These methods were however not that effective in
+determining whether one response really indicated conceptual knowledge. A lot of systems
+could recognize structural aspects of writing and had a hard time determining whether a student had actually been in earnest when dealing with the concepts that a question or prompt
+requested [15]. This prompted researchers to explore more sophisticated machine learning
+methods that would be able to elicit more intense linguistic and semantic insights in the
+response of the student [15]. Survey of automated student assessment and evaluation with
+machine learning showed that most current systems use pre-structured performance information instead of assessing the semantic value of written academic work, and therefore it
+should be emphasized that NLP-based tools are required to be able to analyze the seman-
+51
+tic value of written academic work to evaluate the conceptual quality and relevance [6].
+This theory directly explains why the research problem of unreliable and inconsistent automated grading exists: systems that rely on keyword matching and superficial text features
+cannot determine the true semantic correspondence between a student response and the
+academic prompt, leading to misclassification of valid answers. QualCheck addresses this
+by employing NLP-based semantic analysis to evaluate the conceptual meaning of student
+responses rather than their surface textual features.
+Theory of Transformer-Based Language Models for Text Evaluation, Transformerbased language models signify a significant technology leap in automated academic assessment. They adopt the self-attention mechanisms to model the contextual dependencies
+over whole text sequences and generate intimately contextualized word representations that
+model subtle semantic associations [9]. Among the most significant technological advances
+in the field of NLP, the introduction of transformer-based language models should be mentioned. These are models that make use of mechanisms of attention to analyse contextual
+links between words within a sentence or document. Transformer architectures also make
+machines reason about the interaction of words with each other in a larger context, and
+systems are able to find similarities in meaning even when other words are used, or the sentence structure is different [9]. Comparative analysis of pretrained transformer models to
+automatically grade essays in the Indonesian language discovered that BERT-based model
+network constructions were effective in all instances over baseline neural networks, a fact
+confirming that the advantages of transformer pre-training are interchangeable across languages and educational sectors [9]. A study of automated scoring open-response scoring
+in mathematics employed the Sentence-BERT model to generate semantic representations
+of sentences, and discovered that it outperforms previously reported benchmarks in several
+evaluation measures and that it is able to score responses containing a correct line of reasoning expressed using different vocabulary [2]. This theory provides the scientific basis
+for QualCheck’s use of transformer-based language models as the encoding backbone for
+52
+computing semantic alignment between rubric descriptors, and student responses.
+Theory of Rubric-Based Assessment, A rubric is a scoring guide or assessment instrument adopted in learning with the aim of assessing student work systematically and in a
+uniform, transparent, and objective way [13]. Rubrics are guidelines or systematic instructions that express how the work of the students is to be rated in reference to certain learning
+goals and performance thresholds. They assist in promoting fairness, transparency, and
+uniformity in grading [7]. Studies of automated scoring of student answer scripts with
+large language models have shown that evaluation scores are highly correlated with human
+expert scores especially when structured evaluation standards, like rubric descriptions, are
+given to the model to guide its scoring on particular dimensions of student performance
+[11]. The researchers have determined that rubric-prompting significantly enhanced the
+similarity and pedagogical significance of scores produced with the help of large language
+models as opposed to free evaluation, which is in line with the design principle of incorporating structured criteria with automated evaluation systems [11]. Furthermore, studies
+repeatedly indicate that automated systems with structured rubric standards give higher results of consistency, interpretability, and pedagogical value than systems with no rubric
+standards [11].
+This theory explains a critical dimension of the research problem: the majority of existing automated evaluation systems fail to use rubric-based criteria in their evaluation systems. Unless automated systems are coupled with a structured rubric, they may fail to discern the level of accomplishment of a response relative to the criteria defined by teachers
+[7]. Combining semantic analysis with rubric-based evaluation might enhance the interpretability and reliability of automated grading systems in a substantial way. QualCheck
+directly addresses this gap by integrating rubric descriptors into the semantic encoding and
+classification stages of its evaluation pipeline, ensuring that automated scoring is criterionreferenced and aligned with instructor-defined performance standards.
+Theory of Semantic Similarity Measurement, Semantic similarity is a quantitative mea-
+53
+sure of the degree of overlapping of meaning between two texts that includes not only the
+vocabulary shared by texts but also the contextual and conceptual associations between the
+words and phrases that the texts operate [1]. The measurement of semantic similarity is
+used to determine the level of overlap of meaning between two text passages, including
+both conceptual and contextual relationships that span beyond the shared words, and has
+turned into a fundamental method of automated grading systems that are required to identify correct student responses using varying linguistic forms [8]. A study on semantic similarity between sentences with transformer-based deep learning has shown that BERT-like
+models fine-tuned with metric learning methods, including a Siamese and a triplet network,
+can be effective at determining whether two sentences are semantically equivalent despite
+using totally different vocabulary [8]. It was shown that scoring in semantic representation
+essentially lowers false negatives, namely instances of a student giving a correct answer to
+which the system identifies the answer as incorrect due to vocabulary mismatch with the expected answer, which is a common issue in keyword-based pattern systems [2]. This theory
+provides the direct mathematical and computational foundation for QualCheck’s semantic
+alignment scoring, which uses cosine similarity between BERT-generated vector representations to quantify the degree of conceptual correspondence between student responses and
+rubric-defined academic assessment.
+54
+Notes
+[1] John Atkinson and Diego Palma. 2025. An LLM-based hybrid approach for enhanced automated essay
+scoring. Scientific Reports, 15, 14551. DOI: 10.1038/s41598-025-87862-3.
+[2] Sami Baral, Anthony F. Botelho, John A. Erickson, Priyanka Benachamardi, and Neil T. Heffernan.
+2021. Improving Automated Scoring of Student Open Responses in Mathematics. Tech. rep. Worcester
+Polytechnic Institute. https://files.eric.ed.gov/fulltext/ED615565.pdf.
+[3] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2018. BERT: pre-training of
+deep bidirectional transformers for language understanding. (2018). https://arxiv.org/abs/1810.04805
+arXiv: 1810.04805.
+[4] Myroslava Dzikovska, Rodney Nielsen, Chris Brew, Claudia Leacock, Danilo Giampiccolo, Luisa
+Bentivogli, Peter Clark, Ido Dagan, and Hoa Trang Dang. 2013. SemEval-2013 task 7: the joint student response analysis and 8th recognizing textual entailment challenge. In Second Joint Conference
+on Lexical and Computational Semantics (SEM), Volume 2: Proceedings of the Seventh International
+Workshop on Semantic Evaluation (SemEval 2013). Suresh Manandhar and Deniz Yuret, (Eds.) Association for Computational Linguistics, Atlanta, Georgia, USA, (June 2013), 263–274. https://aclantho
+logy.org/S13-2045.
+[5] Stefan Haller, Adina Aldea, Christin Seifert, and Nicola Strisciuglio. 2022. Survey on automated short
+answer grading with deep learning: from word embeddings to transformers. (2022). https://arxiv.org
+/pdf/2204.03503 arXiv: 2204.03503.
+[6] Chitoor Venkat Ajay Kumar, Adithya Krishna Eemani, Gouri Charan Kalluri, and Gunadeep Rudra.
+2024. A survey on automated student evaluation and analysis using machine learning. World Journal
+of Advanced Research and Reviews. Received: 19 February 2024; Revised: 28 March 2024; Accepted:
+31 March 2024. https://pdfs.semanticscholar.org/c764/aa3c9d9c6194e92290b6acd011d2e0d96a51.p
+df.
+[7] Haile Misgna, Byung-Won On, Ingyu Lee, and Gyu Sang Choi. 2025. A survey on deep learningbased automated essay scoring and feedback generation. Artificial Intelligence Review. DOI: 10.1007
+/s10462-024-11017-5.
+55
+[8] Igor Onyshchenko, Anatoly Anisimov, Oleksandr Marchenko, and Mariam Isoieva. 2022. Analysis of
+semantic similarity between sentences using transformer-based deep learning methods. In Proceedings
+of the 2022 Information Technology and Implementation Conference (IT&I-2022). Vol. 3347. Kyiv,
+Ukraine, (Nov. 2022). https://ceur-ws.org/Vol-3347/Short 9.pdf.
+[9] Pulung Hendro Prastyo, Eddy Tungadi, and Shaifudin Zuhdi. 2025. Indonesian automated essay scoring: a comparative study of pretrained transformer models. Information Technology Education Journal, 4, 2, 120–130. DOI: 10.59562/intec.v4i2.8069.
+[10] Rokhmatul Khoiro Amin Putri, Kusaeri Kusaeri, and Suparto Suparto. 2025. Deep learning in automated essay scoring for islamic education: a systematic review. Online Learning in Educational
+Research, 5, 2, 319–337. https://journal.foundae.com/index.php/oler/article/view/753.
+[11] Santosh Shirol. 2025. Automated evaluation of student answer scripts using large language models. In
+Communications in Computer and Information Science, 190–204. DOI: 10.1007/978-3-031-84394-5
+14.
+[12] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+Kaiser, and Illia Polosukhin. 2017. Attention is all you need. (2017). https://arxiv.org/abs/1706.03762
+arXiv: 1706.03762.
+[13] Yun Wang, Zhaojun Ding, Xuansheng Wu, Siyue Sun, Ninghao Liu, and Xiaoming Zhai. 2025. AutoScore: enhancing automated scoring with multi-agent large language models via structured component recognition. (2025). https://arxiv.org/abs/2509.21910 arXiv: 2509.21910.
+[14] Haneul Yoo, Jieun Han, So-Yeon Ahn, and Alice Oh. 2025. DREsS: dataset for rubric-based essay
+scoring on EFL writing. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and
+Mohammad Taher Pilehvar, (Eds.) Association for Computational Linguistics, Vienna, Austria, (July
+2025), 13439–13454. ISBN: 979-8-89176-251-0. DOI: 10.18653/v1/2025.acl-long.659.
+[15] Xinyu Zhang, Wei Chen, and Jian Li. 2025. A survey of automated essay scoring: challenges, advances, and future directions. Neurocomputing, 650, 130916. DOI: 10.1016/j.neucom.2025.130916.

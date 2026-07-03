@@ -1,0 +1,55 @@
+# Supabase Wiring Instructions
+# Use these instructions when ready to wire the remaining screens to Supabase
+
+## 1. Profile Settings (ui_account.py)
+- Already loads profile from Supabase on page load
+- Update the update_profile() function to:
+  - Get values from form fields (name_field, email_field, etc.)
+  - Call supabase.table("profiles").update() with new values
+  - Update display variables after successful save
+
+## 2. Dashboard / Evaluation Screens (ui_short_answer.py, ui_essay.py, ui_code_report.py)
+- Add imports: from services.supabase_client import get_supabase_client
+- Add imports: from services.session_manager import get_current_user
+- At start of main(), get current user and redirect if no session
+- In on_evaluate(), after evaluation completes, save results:
+  - supabase.table("evaluations").insert({
+      "user_id": user_id,
+      "prompt": prompt_field.value,
+      "rubric_id": None,  # Link to saved rubric later
+      "output_type": "short_answer" (or "essay" or "code_report"),
+      "similarity_score": result["similarity_score"],
+      "classification": result["classification"],
+      "file_name": result["file_name"],
+      "file_path": result["file_path"]
+  }).execute()
+
+## 3. Admin Panel (ui_admin_submissions.py)
+- Add imports: from services.supabase_client import get_supabase_client
+- Add imports: from services.session_manager import get_user_role
+- At start of main(), check user_role and redirect if not admin
+- Load evaluations: supabase.table("evaluations").select("*").order("created_at", desc=True).execute()
+- Build table rows from evaluations_data
+- For each row, get evaluator email from profiles table
+- Display: file_name, similarity_score (as %), classification, output_type, evaluator_email, created_at
+
+## 4. Rubric Library (create or update rubric screen)
+- Add imports: from services.supabase_client import get_supabase_client
+- Load rubrics: supabase.table("rubrics").select("*").eq("user_id", user_id).execute()
+- Create rubric: supabase.table("rubrics").insert({name, output_type, criteria}).execute()
+- Update rubric: supabase.table("rubrics").update().eq("id", rubric_id).execute()
+- Delete rubric: supabase.table("rubrics").delete().eq("id", rubric_id).execute()
+- Increment use_count when rubric is used
+
+## 5. PDF Upload to Supabase Storage
+- Create bucket "student-pdfs" in Supabase Storage
+- Add RLS policy for bucket (admin can read/write, users can write own)
+- Upload file: supabase.storage.from_("student-pdfs").upload(file_path, file_content)
+- Get public URL: supabase.storage.from_("student-pdfs").get_public_url(file_path)
+- Store file_path in evaluations table
+
+## Notes
+- All database operations use the anon key (client-side)
+- RLS policies handle security (users only see their data, admins see all)
+- Session persistence is handled by session_manager.py
+- Profile auto-created on signup via database trigger

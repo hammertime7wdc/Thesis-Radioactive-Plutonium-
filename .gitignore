@@ -1,0 +1,10 @@
+# Ignore Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+datasets/
+.env
+
+qualcheck_output/
+qualcheck_output_withcase/
