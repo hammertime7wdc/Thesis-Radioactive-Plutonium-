@@ -8,3 +8,8 @@ datasets/
 
 qualcheck_output/
 qualcheck_output_withcase/
+
+.session.json
+qualcheck.txt
+qualcheck_design_spec.md
+supabase_wiring_instructions.txt
