@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     department TEXT,
     institution TEXT,
     bio TEXT,
+    avatar_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -52,18 +53,31 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- User activities table for tracking user actions
+CREATE TABLE IF NOT EXISTS user_activities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    activity_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_evaluations_user_id ON evaluations(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON evaluations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rubrics_user_id ON rubrics(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_email ON audit_logs(actor_email);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activities_user_id ON user_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_activities_created_at ON user_activities(created_at DESC);
 
 -- Enable Row Level Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rubrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
 
 -- Helper function to check if user is admin (bypasses RLS)
 CREATE OR REPLACE FUNCTION public.is_admin(user_id UUID)
@@ -150,6 +164,19 @@ CREATE POLICY "Authenticated users can insert audit logs"
 CREATE POLICY "Admins can view audit logs"
     ON audit_logs FOR SELECT
     USING (public.is_admin(auth.uid()));
+
+-- RLS Policies for user_activities
+-- Authenticated users can insert activities (user_id is set in code)
+DROP POLICY IF EXISTS "Users can insert own activities" ON user_activities;
+CREATE POLICY "Users can insert own activities"
+    ON user_activities FOR INSERT
+    WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Users can view their own activities
+DROP POLICY IF EXISTS "Users can view own activities" ON user_activities;
+CREATE POLICY "Users can view own activities"
+    ON user_activities FOR SELECT
+    USING (auth.uid() = user_id);
 
 -- Function to automatically create profile on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
