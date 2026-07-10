@@ -5,6 +5,7 @@ from screens.ui_short_answer import main as short_answer_main
 from screens.ui_essay import main as essay_main
 from screens.ui_code_report import main as code_report_main
 from screens.ui_account import main as account_main
+from screens.ui_dashboard import main as dashboard_main
 from navigation.admin_navigation import AdminNavigation
 from utils.utils import (
     CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
@@ -23,6 +24,36 @@ class Navigation:
         self.app_bar = None
         self.main_content = None
         self.admin_nav = AdminNavigation(page, self)
+        self.current_view = "dashboard"  # Track current view: "dashboard", "evaluation", "account", "admin"
+        self.loading_overlay = None
+
+    def show_loading(self):
+        """Show loading overlay"""
+        self.loading_overlay = ft.Container(
+            content=ft.Column(
+                [
+                    ft.ProgressRing(width=40, height=40, stroke_width=3, color=PRIMARY_BLUE),
+                    ft.Container(height=16),
+                    ft.Text("Loading...", size=14, color=TEXT_SECONDARY),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor="#ffffff",
+            alignment=ft.alignment.center,
+            expand=True,
+        )
+        self.page.add(self.loading_overlay)
+        self.page.update()
+
+    def hide_loading(self):
+        """Hide loading overlay"""
+        if self.loading_overlay:
+            try:
+                self.page.remove(self.loading_overlay)
+            except ValueError:
+                pass
+            self.loading_overlay = None
+            self.page.update()
 
     def create_evaluation_app_bar(self):
         """Create shared app bar for evaluation screens matching the screenshot design"""
@@ -62,7 +93,7 @@ class Navigation:
 
         # Check if the user is an admin to show Admin switching button
         role = get_user_role()
-        
+
         buttons_row = [ft.Container(width=20)]
         if role == "admin":
             buttons_row.extend([
@@ -77,23 +108,32 @@ class Navigation:
                 ),
                 ft.Container(width=8),
             ])
-            
+
+        # Determine button colors based on current view
+        dashboard_bg = PRIMARY_BLUE if self.current_view == "dashboard" else "#f1f5f9"
+        dashboard_color = TEXT_WHITE if self.current_view == "dashboard" else TEXT_PRIMARY
+        dashboard_weight = ft.FontWeight.W_600 if self.current_view == "dashboard" else ft.FontWeight.W_500
+
+        evaluation_bg = PRIMARY_BLUE if self.current_view == "evaluation" else "#f1f5f9"
+        evaluation_color = TEXT_WHITE if self.current_view == "evaluation" else TEXT_PRIMARY
+        evaluation_weight = ft.FontWeight.W_600 if self.current_view == "evaluation" else ft.FontWeight.W_500
+
         buttons_row.extend([
-            # New Evaluation - solid blue button
+            # New Evaluation button
             ft.Container(
-                content=ft.Text("New Evaluation", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
+                content=ft.Text("New Evaluation", size=13, weight=evaluation_weight, color=evaluation_color),
                 padding=ft.padding.symmetric(horizontal=16, vertical=10),
-                bgcolor=PRIMARY_BLUE,
+                bgcolor=evaluation_bg,
                 border_radius=8,
                 alignment=ft.alignment.center,
                 on_click=lambda e: self.navigate_to_short_answer(),
             ),
             ft.Container(width=8),
-            # Dashboard - light gray button
+            # Dashboard button
             ft.Container(
-                content=ft.Text("Dashboard", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+                content=ft.Text("Dashboard", size=13, weight=dashboard_weight, color=dashboard_color),
                 padding=ft.padding.symmetric(horizontal=16, vertical=10),
-                bgcolor="#f1f5f9",
+                bgcolor=dashboard_bg,
                 border_radius=8,
                 alignment=ft.alignment.center,
                 on_click=lambda e: self.navigate_to_dashboard(),
@@ -194,70 +234,76 @@ class Navigation:
         self.page.update()
         reset_password_main(self.page, self)
 
-    def navigate_to_short_answer(self):
-        """Navigate to short answer evaluation screen"""
+    def _update_appbar_buttons(self):
+        """Update the app bar button active states in-place without recreating the app bar"""
+        if not self.app_bar or not self.app_bar.title:
+            return
+        title_row = self.app_bar.title
+        if not hasattr(title_row, 'controls'):
+            return
+        for child in title_row.controls:
+            if not hasattr(child, 'on_click') or child.on_click is None:
+                continue
+            if not hasattr(child, 'content') or not isinstance(child.content, ft.Text):
+                continue
+            label = child.content.value
+            if label == "New Evaluation":
+                is_active = self.current_view == "evaluation"
+                child.bgcolor = PRIMARY_BLUE if is_active else "#f1f5f9"
+                child.content.color = TEXT_WHITE if is_active else TEXT_PRIMARY
+                child.content.weight = ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500
+            elif label == "Dashboard":
+                is_active = self.current_view == "dashboard"
+                child.bgcolor = PRIMARY_BLUE if is_active else "#f1f5f9"
+                child.content.color = TEXT_WHITE if is_active else TEXT_PRIMARY
+                child.content.weight = ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500
+
+    def _swap_evaluator_content(self, content_loader):
+        """Swap only the main content area, keeping the app bar in place"""
+        self.page.window_width = 1200
+        self.page.window_height = 800
+        self.page.padding = 0
+        self.page.bgcolor = "#f8fafc"
+        self.page.theme_mode = ft.ThemeMode.LIGHT
+
         if not self.is_evaluation_mode:
+            # First time entering evaluator mode: clean everything and build app bar
             self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
             self.is_evaluation_mode = True
             self.create_evaluation_app_bar()
+            content_loader()
+            self.page.update()
         else:
-            # Just replace main content, keep app bar
-            if self.main_content:
+            # Subsequent switches: only remove old content and update button styles
+            if self.main_content and self.main_content in self.page.controls:
                 try:
                     self.page.remove(self.main_content)
                 except ValueError:
-                    pass  # Already removed from page
-        short_answer_main(self.page, self)
+                    pass
+                self.main_content = None
+            self._update_appbar_buttons()
+            content_loader()
+            self.page.update()
+
+    def navigate_to_short_answer(self):
+        """Navigate to short answer evaluation screen"""
+        self.current_view = "evaluation"
+        self._swap_evaluator_content(lambda: short_answer_main(self.page, self))
 
     def navigate_to_essay(self):
         """Navigate to essay evaluation screen"""
-        if not self.is_evaluation_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_evaluation_mode = True
-            self.create_evaluation_app_bar()
-        else:
-            # Just replace main content, keep app bar
-            if self.main_content:
-                try:
-                    self.page.remove(self.main_content)
-                except ValueError:
-                    pass  # Already removed from page
-        essay_main(self.page, self)
+        self.current_view = "evaluation"
+        self._swap_evaluator_content(lambda: essay_main(self.page, self))
 
     def navigate_to_code_report(self):
         """Navigate to code report evaluation screen"""
-        if not self.is_evaluation_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_evaluation_mode = True
-            self.create_evaluation_app_bar()
-        else:
-            # Just replace main content, keep app bar
-            if self.main_content:
-                try:
-                    self.page.remove(self.main_content)
-                except ValueError:
-                    pass  # Already removed from page
-        code_report_main(self.page, self)
+        self.current_view = "evaluation"
+        self._swap_evaluator_content(lambda: code_report_main(self.page, self))
 
     def navigate_to_dashboard(self):
-        """Navigate to dashboard (placeholder)"""
-        # TODO: Implement dashboard screen
-        print("Dashboard navigation - not implemented yet")
+        """Navigate to dashboard"""
+        self.current_view = "dashboard"
+        self._swap_evaluator_content(lambda: dashboard_main(self.page, self, role="evaluator"))
 
     def navigate_to_account(self):
         """Navigate to evaluator account settings"""
@@ -275,5 +321,6 @@ class Navigation:
 
     def navigate_to_admin(self):
         """Navigate to admin panel"""
+        self.is_evaluation_mode = False
         self.admin_nav.is_admin_mode = False
         self.admin_nav.navigate_to_admin()

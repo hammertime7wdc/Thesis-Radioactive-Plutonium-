@@ -6,6 +6,7 @@ import flet as ft
 from screens.ui_admin import main as admin_main
 from screens.ui_admin_settings_audit import main as settings_audit_main
 from screens.ui_admin_submissions import main as submissions_main
+from screens.ui_admin_analytics import main as analytics_main
 from screens.ui_account import main as account_main
 from utils.utils import (
     CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
@@ -23,9 +24,12 @@ class AdminNavigation:
         self.parent_nav = parent_nav
         self.current_tab = 0
         self.main_content = None
+        self.secondary_nav = None
+        self.admin_header = None
         self.is_evaluation_mode = False
         self.is_admin_mode = False
         self.app_bar = None
+        self.loading_overlay = None
     
     def create_admin_app_bar(self):
         """Create shared app bar for admin screens"""
@@ -83,6 +87,7 @@ class AdminNavigation:
 
         def on_dashboard(e):
             if self.parent_nav:
+                self.parent_nav.is_evaluation_mode = False
                 self.parent_nav.navigate_to_dashboard()
             else:
                 from navigation.navigation import Navigation
@@ -230,15 +235,9 @@ class AdminNavigation:
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
-            bgcolor=CARD_BG_COLOR,
+            bgcolor="#f8fafc",
             border=ft.border.only(bottom=ft.BorderSide(1, BORDER_COLOR)),
             padding=ft.padding.symmetric(horizontal=32, vertical=12),
-            shadow=ft.BoxShadow(
-                blur_radius=4,
-                spread_radius=0,
-                color=TEXT_TERTIARY,
-                offset=ft.Offset(0, 1),
-            ),
         )
 
     def _on_tab_click(self, index):
@@ -299,144 +298,116 @@ class AdminNavigation:
         )
         return admin_header
 
-    def navigate_to_users(self):
-        """Navigate to Users tab"""
-        self.current_tab = 0
-        if not self.is_admin_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_admin_mode = True
-            self.create_admin_app_bar()
-            self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
-            admin_header = self.create_admin_header()
-            self.page.add(admin_header)
-        else:
-            # Just replace main content, keep app bar and nav bar
-            if self.main_content:
-                self.page.remove(self.main_content)
-            # Update secondary nav to reflect current tab
-            self.create_secondary_nav_bar()
-            # Need to replace the secondary nav in the page
-            # Find and remove old secondary nav
-            for i, control in enumerate(self.page.controls):
-                if hasattr(control, 'content') and hasattr(control.content, 'controls'):
-                    # This is likely the secondary nav
-                    self.page.controls[i] = self.secondary_nav
-                    break
-        admin_main(self.page, self)
-        self.page.update()
-
-    def navigate_to_analytics(self):
-        """Navigate to Analytics tab (placeholder)"""
-        self.current_tab = 1
-        if not self.is_admin_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_admin_mode = True
-            self.create_admin_app_bar()
-            self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
-            admin_header = self.create_admin_header()
-            self.page.add(admin_header)
-        else:
-            # Just replace main content, keep app bar and nav bar
-            if self.main_content:
-                self.page.remove(self.main_content)
-            # Update secondary nav to reflect current tab
-            self.create_secondary_nav_bar()
-            # Need to replace the secondary nav in the page
-            for i, control in enumerate(self.page.controls):
-                if hasattr(control, 'content') and hasattr(control.content, 'controls'):
-                    self.page.controls[i] = self.secondary_nav
-                    break
-        # TODO: Implement analytics screen
-        placeholder = ft.Container(
+    def show_loading(self):
+        """Show loading overlay"""
+        self.loading_overlay = ft.Container(
             content=ft.Column(
                 [
-                    ft.Icon(ft.Icons.ANALYTICS, size=64, color=TEXT_SECONDARY),
-                    ft.Container(height=20),
-                    ft.Text("Analytics", size=22, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                    ft.Container(height=8),
-                    ft.Text("Analytics dashboard coming soon", size=13, color=TEXT_SECONDARY),
+                    ft.ProgressRing(width=40, height=40, stroke_width=3, color=PRIMARY_BLUE),
+                    ft.Container(height=16),
+                    ft.Text("Loading...", size=14, color=TEXT_SECONDARY),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            padding=ft.padding.all(40),
+            bgcolor="#ffffff",
             alignment=ft.alignment.center,
             expand=True,
         )
-        self.page.add(placeholder)
-        self.main_content = placeholder
+        self.page.add(self.loading_overlay)
         self.page.update()
+
+    def hide_loading(self):
+        """Hide loading overlay"""
+        if hasattr(self, 'loading_overlay') and self.loading_overlay:
+            try:
+                self.page.remove(self.loading_overlay)
+            except ValueError:
+                pass
+            self.loading_overlay = None
+            self.page.update()
+
+    def _update_tab_styles(self):
+        """Update the tab bar styling in-place without recreating/removing it"""
+        if not self.secondary_nav or not self.secondary_nav.content:
+            return
+        tab_row = self.secondary_nav.content
+        tab_index = 0
+        for child in tab_row.controls:
+            # Skip spacer containers (width=8)
+            if hasattr(child, 'on_click') and child.on_click is not None:
+                is_active = tab_index == self.current_tab
+                child.bgcolor = PRIMARY_BLUE if is_active else "#f1f5f9"
+                # Update icon and text colors inside the row
+                if child.content and hasattr(child.content, 'controls'):
+                    for inner in child.content.controls:
+                        if isinstance(inner, ft.Icon):
+                            inner.color = TEXT_WHITE if is_active else TEXT_SECONDARY
+                        elif isinstance(inner, ft.Text):
+                            inner.color = TEXT_WHITE if is_active else TEXT_PRIMARY
+                            inner.weight = ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500
+                tab_index += 1
+
+    def _swap_content(self, content_loader):
+        """Swap only the main content area, keeping header and nav bar in place"""
+        # Set page configurations (idempotent)
+        self.page.window_width = 1200
+        self.page.window_height = 800
+        self.page.padding = 0
+        self.page.bgcolor = "#f8fafc"
+        self.page.theme_mode = ft.ThemeMode.LIGHT
+
+        if not self.is_admin_mode:
+            # First time entering admin: clean everything and build full layout
+            self.page.clean()
+            self.is_admin_mode = True
+            self.create_admin_app_bar()
+
+            # 1. Admin Header
+            self.admin_header = self.create_admin_header()
+            self.page.add(self.admin_header)
+
+            # 2. Tab bar
+            self.create_secondary_nav_bar()
+            self.page.add(self.secondary_nav)
+
+            # 3. Load content
+            content_loader()
+            self.page.update()
+        else:
+            # Subsequent tab switches: only remove old content and update tabs in-place
+            if self.main_content and self.main_content in self.page.controls:
+                try:
+                    self.page.remove(self.main_content)
+                except ValueError:
+                    pass
+                self.main_content = None
+
+            # Update tab active states in-place (no remove/re-add)
+            self._update_tab_styles()
+
+            # Load new content (it will page.add itself and set self.main_content)
+            content_loader()
+            self.page.update()
+
+    def navigate_to_users(self):
+        """Navigate to Users tab"""
+        self.current_tab = 0
+        self._swap_content(lambda: admin_main(self.page, self))
+
+    def navigate_to_analytics(self):
+        """Navigate to Analytics tab"""
+        self.current_tab = 1
+        self._swap_content(lambda: analytics_main(self.page, self))
 
     def navigate_to_submissions(self):
         """Navigate to Submissions tab"""
         self.current_tab = 2
-        if not self.is_admin_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_admin_mode = True
-            self.create_admin_app_bar()
-            self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
-            admin_header = self.create_admin_header()
-            self.page.add(admin_header)
-        else:
-            # Just replace main content, keep app bar and nav bar
-            if self.main_content:
-                self.page.remove(self.main_content)
-            # Update secondary nav to reflect current tab
-            self.create_secondary_nav_bar()
-            # Need to replace the secondary nav in the page
-            for i, control in enumerate(self.page.controls):
-                if hasattr(control, 'content') and hasattr(control.content, 'controls'):
-                    self.page.controls[i] = self.secondary_nav
-                    break
-        submissions_main(self.page, self)
-        self.page.update()
+        self._swap_content(lambda: submissions_main(self.page, self))
 
     def navigate_to_settings_audit(self):
         """Navigate to Settings & Audit tab"""
         self.current_tab = 3
-        if not self.is_admin_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_admin_mode = True
-            self.create_admin_app_bar()
-            self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
-            admin_header = self.create_admin_header()
-            self.page.add(admin_header)
-        else:
-            # Just replace main content, keep app bar and nav bar
-            if self.main_content:
-                self.page.remove(self.main_content)
-            # Update secondary nav to reflect current tab
-            self.create_secondary_nav_bar()
-            # Need to replace the secondary nav in the page
-            for i, control in enumerate(self.page.controls):
-                if hasattr(control, 'content') and hasattr(control.content, 'controls'):
-                    self.page.controls[i] = self.secondary_nav
-                    break
-        settings_audit_main(self.page, self)
-        self.page.update()
+        self._swap_content(lambda: settings_audit_main(self.page, self))
 
     def navigate_to_account(self):
         """Navigate to account settings screen"""
@@ -454,35 +425,7 @@ class AdminNavigation:
 
     def navigate_to_admin(self):
         """Navigate to admin panel (initial entry)"""
-        if not self.is_admin_mode:
-            self.page.clean()
-            self.page.window_width = 1200
-            self.page.window_height = 800
-            self.page.padding = 0
-            self.page.bgcolor = "#f8fafc"
-            self.page.theme_mode = ft.ThemeMode.LIGHT
-            self.is_admin_mode = True
-            self.create_admin_app_bar()
-            self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
-            admin_header = self.create_admin_header()
-            self.page.add(admin_header)
-        else:
-            # Just replace main content, keep app bar and nav bar
-            if self.main_content:
-                try:
-                    self.page.remove(self.main_content)
-                except ValueError:
-                    pass  # Already removed from page
-            # Update secondary nav to reflect current tab
-            self.create_secondary_nav_bar()
-            # Need to replace the secondary nav in the page
-            for i, control in enumerate(self.page.controls):
-                if hasattr(control, 'content') and hasattr(control.content, 'controls'):
-                    self.page.controls[i] = self.secondary_nav
-                    break
-        admin_main(self.page, self)
-        self.page.update()
+        self.navigate_to_users()
 
     def navigate_to_login(self):
         from screens.ui_login import main as login_main
