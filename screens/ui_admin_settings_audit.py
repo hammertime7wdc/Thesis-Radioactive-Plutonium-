@@ -3,6 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import flet as ft
+from services.audit_service import get_audit_logs, format_audit_log_detail
 from utils.utils import (
     BG_COLOR, CARD_BG_COLOR, SECTION_BG_COLOR,
     PRIMARY_BLUE, PRIMARY_BLUE_DARK, PRIMARY_BLUE_LIGHT,
@@ -64,90 +65,6 @@ def main(page: ft.Page, nav=None):
     else:
         admin_header = None
 
-    # --- Scoring Thresholds Section ---
-    scoring_label = ft.Text("Scoring Thresholds", size=18, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY)
-    scoring_subtitle = ft.Text("Adjust the similarity score cutoffs used to classify each response", size=13, color=TEXT_TERTIARY)
-
-    # Threshold sliders with full-width layout matching the screenshot
-    fully_relevant_value = ft.Text("75%", size=14, weight=ft.FontWeight.W_600, color=SUCCESS)
-    fully_relevant_slider = ft.Slider(
-        value=75,
-        min=0,
-        max=100,
-        active_color=PRIMARY_BLUE,
-        expand=True,
-    )
-
-    partially_relevant_value = ft.Text("50%", size=14, weight=ft.FontWeight.W_600, color=WARNING)
-    partially_relevant_slider = ft.Slider(
-        value=50,
-        min=0,
-        max=100,
-        active_color=PRIMARY_BLUE,
-        expand=True,
-    )
-
-    threshold_row1 = ft.Column(
-        [
-            ft.Text("Fully Relevant ≥", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
-            ft.Container(height=8),
-            ft.Row(
-                [fully_relevant_slider, ft.Container(width=12), fully_relevant_value],
-                alignment=ft.MainAxisAlignment.START,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        ],
-        spacing=0,
-    )
-
-    threshold_row2 = ft.Column(
-        [
-            ft.Text("Partially Relevant ≥", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
-            ft.Container(height=8),
-            ft.Row(
-                [partially_relevant_slider, ft.Container(width=12), partially_relevant_value],
-                alignment=ft.MainAxisAlignment.START,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        ],
-        spacing=0,
-    )
-
-    def on_save_thresholds(e):
-        print("Save thresholds clicked")
-
-    save_thresholds_btn = ft.Container(
-        content=ft.Text("Save Thresholds", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
-        width=150,
-        height=38,
-        border_radius=8,
-        bgcolor=PRIMARY_BLUE,
-        alignment=ft.alignment.center,
-        on_click=on_save_thresholds,
-        ink=True,
-    )
-
-    scoring_section = ft.Container(
-        content=ft.Column(
-            [
-                scoring_label,
-                ft.Container(height=4),
-                scoring_subtitle,
-                ft.Container(height=24),
-                threshold_row1,
-                ft.Container(height=20),
-                threshold_row2,
-                ft.Container(height=24),
-                ft.Row([save_thresholds_btn], alignment=ft.MainAxisAlignment.START),
-            ],
-            spacing=0,
-        ),
-        padding=ft.padding.all(24),
-        bgcolor=CARD_BG_COLOR,
-        border_radius=12,
-        border=ft.border.all(1, BORDER_COLOR),
-    )
-
     # --- Audit Log Section (timeline-style matching the screenshot) ---
     def create_audit_entry(action_text, detail_text, user_email, timestamp):
         return ft.Container(
@@ -179,35 +96,50 @@ def main(page: ft.Page, nav=None):
             border=ft.border.only(bottom=ft.BorderSide(1, BORDER_COLOR)),
         )
 
-    audit_entries = ft.Column(
-        [
+    # Fetch real audit logs from database
+    audit_logs_data = get_audit_logs(limit=50)
+
+    # Format timestamp for display
+    def format_timestamp(timestamp_str):
+        """Format ISO timestamp to readable format"""
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except:
+            return timestamp_str
+
+    # Create audit entries from real data
+    audit_entries_list = []
+    for log in audit_logs_data:
+        detail_text = format_audit_log_detail(log.get('detail'))
+        timestamp = format_timestamp(log.get('created_at', ''))
+        audit_entries_list.append(
             create_audit_entry(
-                "Override classification",
-                "maria_reyes.pdf → Fully Relevant",
-                "admin@qualcheck.edu",
-                "2025-06-24 09:45",
-            ),
-            create_audit_entry(
-                "Uploaded 8 PDFs",
-                "Sorting Algorithm Report batch",
-                "jchen@university.edu",
-                "2025-06-23 14:00",
-            ),
-            create_audit_entry(
-                "Override classification",
-                "marco_santos.pdf → Partially Relevant",
-                "admin@qualcheck.edu",
-                "2025-06-22 12:10",
-            ),
-            create_audit_entry(
-                "Added user",
-                "alee@university.edu (Evaluator)",
-                "admin@qualcheck.edu",
-                "2025-06-21 10:30",
-            ),
-        ],
-        spacing=0,
-    )
+                log.get('action', 'Unknown action'),
+                detail_text,
+                log.get('actor_email', 'Unknown user'),
+                timestamp,
+            )
+        )
+
+    # Show empty state if no logs
+    if not audit_entries_list:
+        audit_entries_list = [
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.HISTORY_OUTLINED, size=16, color=TEXT_TERTIARY),
+                        ft.Container(width=12),
+                        ft.Text("No audit logs found", size=13, color=TEXT_SECONDARY),
+                    ],
+                    spacing=0,
+                ),
+                padding=ft.padding.symmetric(vertical=12),
+            )
+        ]
+
+    audit_entries = ft.Column(audit_entries_list, spacing=0)
 
     audit_section = ft.Container(
         content=ft.Column(
@@ -238,8 +170,6 @@ def main(page: ft.Page, nav=None):
                 [
                     admin_header,
                     ft.Container(height=8),
-                    ft.Container(content=scoring_section, padding=ft.padding.symmetric(horizontal=32)),
-                    ft.Container(height=20),
                     ft.Container(content=audit_section, padding=ft.padding.symmetric(horizontal=32)),
                     ft.Container(height=40),
                 ],
@@ -250,8 +180,6 @@ def main(page: ft.Page, nav=None):
         main_content = ft.Container(
             content=ft.Column(
                 [
-                    ft.Container(content=scoring_section, padding=ft.padding.symmetric(horizontal=32)),
-                    ft.Container(height=20),
                     ft.Container(content=audit_section, padding=ft.padding.symmetric(horizontal=32)),
                     ft.Container(height=40),
                 ],

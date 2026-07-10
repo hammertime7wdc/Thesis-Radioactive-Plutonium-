@@ -59,6 +59,7 @@ def main(page: ft.Page, nav=None):
     page.padding = 0
     page.bgcolor = "#0f1e30"
     page.theme_mode = ft.ThemeMode.DARK
+    page.appbar = None  # Explicitly clear any existing app bar
     page.clean()
 
     blob1 = ft.Container(width=600, height=600, gradient=ft.RadialGradient(colors=[ft.Colors.with_opacity(0.12, ft.Colors.BLUE_400), ft.Colors.with_opacity(0.0, ft.Colors.BLUE_400)], stops=[0.0, 1.0]), left=-100, top=-100)
@@ -67,7 +68,8 @@ def main(page: ft.Page, nav=None):
 
     def animate_blobs():
         t = 0.0
-        while True:
+        # Stop background animation thread once page title changes to clean up memory and prevent rogue update calls
+        while page.title == "QualCheck Login":
             try:
                 blob1.top = -100 + 80 * math.sin(t); blob1.left = -100 + 120 * math.cos(t * 0.8)
                 blob2.bottom = -200 + 100 * math.cos(t * 0.9); blob2.right = -200 + 150 * math.sin(t * 0.7)
