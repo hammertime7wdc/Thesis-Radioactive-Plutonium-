@@ -255,31 +255,53 @@ def main(page: ft.Page, nav=None):
     # --- Evaluate Button ---
     def on_evaluate(e):
         # TODO: Integrate with core evaluation module
-        # Example:
-        # from core.pdf_processor import PDFProcessor
-        # from core.embeddings import EmbeddingGenerator
-        # from core.evaluation import Evaluator
-        # 
-        # pdf_processor = PDFProcessor()
-        # embedding_gen = EmbeddingGenerator("path/to/model.safetensors")
-        # evaluator = Evaluator(embedding_gen)
-        # 
-        # # Extract text from uploaded PDFs
-        # responses = pdf_processor.extract_text_batch(uploaded_pdfs)
-        # 
-        # # Build rubric criteria from form fields
-        # rubric = {
-        #     "Accuracy": criterion1_field.value,
-        #     "Key Concept": criterion2_field.value,
-        #     "Clarity": criterion3_field.value
-        # }
-        # 
-        # # Evaluate responses
-        # results = evaluator.evaluate_batch(responses, rubric)
-        # 
-        # # Display results
-        # print("Evaluation results:", results)
-        print("Evaluate button clicked - integration pending model availability")
+        # For now, create mock results to demonstrate the studenta_result screen
+        import random
+        
+        # Mock student results
+        mock_results = [
+            {
+                "name": "Student 1",
+                "file": "student_1.pdf",
+                "score": random.uniform(60, 95),
+                "criteria": [
+                    ("Accuracy", random.randint(50, 100)),
+                    ("Key Concept", random.randint(50, 100)),
+                    ("Clarity", random.randint(50, 100)),
+                ],
+            },
+            {
+                "name": "Student 2",
+                "file": "student_2.pdf",
+                "score": random.uniform(60, 95),
+                "criteria": [
+                    ("Accuracy", random.randint(50, 100)),
+                    ("Key Concept", random.randint(50, 100)),
+                    ("Clarity", random.randint(50, 100)),
+                ],
+            },
+            {
+                "name": "Student 3",
+                "file": "student_3.pdf",
+                "score": random.uniform(60, 95),
+                "criteria": [
+                    ("Accuracy", random.randint(50, 100)),
+                    ("Key Concept", random.randint(50, 100)),
+                    ("Clarity", random.randint(50, 100)),
+                ],
+            },
+        ]
+        
+        # Build rubric from form fields
+        rubric = [
+            ("Accuracy", criterion1_field.value),
+            ("Key Concept", criterion2_field.value),
+            ("Clarity", criterion3_field.value),
+        ]
+        
+        # Navigate to results screen
+        if nav and hasattr(nav, 'navigate_to_student_result'):
+            nav.navigate_to_student_result(mock_results, prompt_field.value, rubric)
 
     evaluate_btn = ft.ElevatedButton(
         content=ft.Row(
