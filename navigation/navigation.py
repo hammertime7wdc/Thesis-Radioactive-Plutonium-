@@ -6,6 +6,7 @@ from screens.ui_essay import main as essay_main
 from screens.ui_code_report import main as code_report_main
 from screens.ui_account import main as account_main
 from screens.ui_dashboard import main as dashboard_main
+from screens.studenta_result import main as studenta_result_main
 from navigation.admin_navigation import AdminNavigation
 from utils.utils import (
     CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
@@ -26,6 +27,9 @@ class Navigation:
         self.admin_nav = AdminNavigation(page, self)
         self.current_view = "dashboard"  # Track current view: "dashboard", "evaluation", "account", "admin"
         self.loading_overlay = None
+        self.evaluation_results = None  # Store evaluation results
+        self.evaluation_prompt = None  # Store academic prompt
+        self.evaluation_rubric = None  # Store rubric
 
     def show_loading(self):
         """Show loading overlay"""
@@ -318,6 +322,16 @@ class Navigation:
         self.app_bar = None
         account_main(self.page, self, role="evaluator")
         self.page.update()
+
+    def navigate_to_student_result(self, results=None, academic_prompt=None, rubric=None):
+        """Navigate to student results screen"""
+        # Store evaluation data
+        self.evaluation_results = results
+        self.evaluation_prompt = academic_prompt
+        self.evaluation_rubric = rubric
+        
+        self.current_view = "evaluation"
+        self._swap_evaluator_content(lambda: studenta_result_main(self.page, self, results, academic_prompt, rubric))
 
     def navigate_to_admin(self):
         """Navigate to admin panel"""
