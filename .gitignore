@@ -13,3 +13,7 @@ qualcheck_output_withcase/
 qualcheck.txt
 qualcheck_design_spec.md
 supabase_wiring_instructions.txt
+
+
+backend_integration_requirements.txt
+libraries_used.txt
