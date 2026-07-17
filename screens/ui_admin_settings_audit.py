@@ -96,9 +96,6 @@ def main(page: ft.Page, nav=None):
             border=ft.border.only(bottom=ft.BorderSide(1, BORDER_COLOR)),
         )
 
-    # Fetch real audit logs from database
-    audit_logs_data = get_audit_logs(limit=50)
-
     # Format timestamp for display
     def format_timestamp(timestamp_str):
         """Format ISO timestamp to readable format"""
@@ -109,37 +106,45 @@ def main(page: ft.Page, nav=None):
         except:
             return timestamp_str
 
-    # Create audit entries from real data
-    audit_entries_list = []
-    for log in audit_logs_data:
-        detail_text = format_audit_log_detail(log.get('detail'))
-        timestamp = format_timestamp(log.get('created_at', ''))
-        audit_entries_list.append(
-            create_audit_entry(
-                log.get('action', 'Unknown action'),
-                detail_text,
-                log.get('actor_email', 'Unknown user'),
-                timestamp,
+    # Fetch audit logs synchronously to prevent transition lag/spinner flash
+    try:
+        logs_data = get_audit_logs(limit=50)
+        entries = []
+        for log in logs_data:
+            detail_text = format_audit_log_detail(log.get('detail'))
+            timestamp = format_timestamp(log.get('created_at', ''))
+            entries.append(
+                create_audit_entry(
+                    log.get('action', 'Unknown action'),
+                    detail_text,
+                    log.get('actor_email', 'Unknown user'),
+                    timestamp,
+                )
             )
-        )
 
-    # Show empty state if no logs
-    if not audit_entries_list:
-        audit_entries_list = [
-            ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Icon(ft.Icons.HISTORY_OUTLINED, size=16, color=TEXT_TERTIARY),
-                        ft.Container(width=12),
-                        ft.Text("No audit logs found", size=13, color=TEXT_SECONDARY),
-                    ],
-                    spacing=0,
-                ),
-                padding=ft.padding.symmetric(vertical=12),
-            )
-        ]
+        if not entries:
+            entries = [
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.HISTORY_OUTLINED, size=16, color=TEXT_TERTIARY),
+                            ft.Container(width=12),
+                            ft.Text("No audit logs found", size=13, color=TEXT_SECONDARY),
+                        ],
+                        spacing=0,
+                    ),
+                    padding=ft.padding.symmetric(vertical=12),
+                )
+            ]
 
-    audit_entries = ft.Column(audit_entries_list, spacing=0)
+        audit_entries_content = ft.Column(entries, spacing=0)
+    except Exception as err:
+        audit_entries_content = ft.Text(f"Failed to load logs: {err}", color=ERROR, size=13)
+
+    audit_entries = ft.Container(
+        content=audit_entries_content,
+        padding=ft.padding.symmetric(vertical=20),
+    )
 
     audit_section = ft.Container(
         content=ft.Column(

@@ -77,29 +77,28 @@ def main(page: ft.Page, nav=None):
         if nav:
             nav.navigate_to_code_report()
 
+    def output_type_button(label: str, selected: bool, on_click):
+        return ft.ElevatedButton(
+            content=ft.Text(
+                label,
+                color=PRIMARY_BLUE if selected else TEXT_PRIMARY,
+                weight=ft.FontWeight.BOLD if selected else ft.FontWeight.W_500,
+            ),
+            height=40,
+            style=ft.ButtonStyle(
+                bgcolor="#eff6ff" if selected else "#ffffff",
+                shape=ft.RoundedRectangleBorder(radius=8),
+                side=ft.BorderSide(1, PRIMARY_BLUE if selected else BORDER_COLOR),
+                elevation=0,
+            ),
+            on_click=on_click,
+        )
+
     output_type_buttons = ft.Row(
         [
-            ft.ElevatedButton(
-                content=ft.Text("Short Answer", color=BUTTON_SECONDARY_TEXT),
-                bgcolor=BUTTON_SECONDARY_BG,
-                color=BUTTON_SECONDARY_TEXT,
-                height=40,
-                on_click=on_short_answer,
-            ),
-            ft.ElevatedButton(
-                content=ft.Text("Essay", color=BUTTON_SECONDARY_TEXT),
-                bgcolor=BUTTON_SECONDARY_BG,
-                color=BUTTON_SECONDARY_TEXT,
-                height=40,
-                on_click=on_essay,
-            ),
-            ft.ElevatedButton(
-                content=ft.Text("Code Report", color=BUTTON_PRIMARY_TEXT),
-                bgcolor=BUTTON_PRIMARY_BG,
-                color=BUTTON_PRIMARY_TEXT,
-                height=40,
-                on_click=on_code_report,
-            ),
+            output_type_button("Short Answer", False, on_short_answer),
+            output_type_button("Essay", False, on_essay),
+            output_type_button("Code Report", True, on_code_report),
         ],
         spacing=10,
     )
@@ -146,7 +145,24 @@ def main(page: ft.Page, nav=None):
         color=TEXT_SECONDARY,
     )
 
-    criterion1_label = ft.Text("1 Technical Terminology", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY)
+    def criterion_badge(number: str, text: str):
+        return ft.Row(
+            [
+                ft.Container(
+                    content=ft.Text(number, size=11, weight=ft.FontWeight.BOLD, color=TEXT_WHITE),
+                    width=20,
+                    height=20,
+                    border_radius=10,
+                    bgcolor=PRIMARY_BLUE,
+                    alignment=ft.alignment.center,
+                ),
+                ft.Container(width=8),
+                ft.Text(text, size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ],
+            spacing=0,
+        )
+
+    criterion1_label = criterion_badge("1", "Technical Terminology")
     criterion1_field = ft.TextField(
         hint_text="Define technical terminology expectations...",
         multiline=True,
@@ -160,7 +176,7 @@ def main(page: ft.Page, nav=None):
         content_padding=ft.padding.all(10),
     )
 
-    criterion2_label = ft.Text("2 Clarity and Cohesion", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY)
+    criterion2_label = criterion_badge("2", "Clarity and Cohesion")
     criterion2_field = ft.TextField(
         hint_text="Define clarity and cohesion expectations...",
         multiline=True,
@@ -174,7 +190,7 @@ def main(page: ft.Page, nav=None):
         content_padding=ft.padding.all(10),
     )
 
-    criterion3_label = ft.Text("3 Constraint Adherence", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY)
+    criterion3_label = criterion_badge("3", "Constraint Adherence")
     criterion3_field = ft.TextField(
         hint_text="Define constraint adherence expectations...",
         multiline=True,
@@ -188,7 +204,7 @@ def main(page: ft.Page, nav=None):
         content_padding=ft.padding.all(10),
     )
 
-    criterion4_label = ft.Text("4 Algorithmic Logic", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY)
+    criterion4_label = criterion_badge("4", "Algorithmic Logic")
     criterion4_field = ft.TextField(
         hint_text="Define algorithmic logic expectations...",
         multiline=True,
@@ -234,7 +250,17 @@ def main(page: ft.Page, nav=None):
     )
 
     # --- Student Responses Section ---
-    responses_label = ft.Text("Student Responses", size=14, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY)
+    responses_label = ft.Row(
+        [
+            ft.Text("Student Responses", size=14, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+            ft.Container(width=8),
+            ft.Icon(ft.Icons.GROUP_OUTLINED, size=14, color=TEXT_TERTIARY),
+            ft.Container(width=4),
+            ft.Text("PDF per student", size=12, color=TEXT_TERTIARY),
+        ],
+        spacing=0,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
     responses_subtitle = ft.Text(
         "Upload one PDF per student — all will be evaluated against the same rubric",
         size=12,
@@ -325,6 +351,9 @@ def main(page: ft.Page, nav=None):
         if nav and hasattr(nav, 'navigate_to_student_result'):
             nav.navigate_to_student_result(mock_results, prompt_field.value, rubric)
 
+    DISABLED_BG = "#cbd5e1"
+    DISABLED_TEXT = "#f8fafc"
+
     evaluate_btn = ft.ElevatedButton(
         content=ft.Row(
             [ft.Text("> Evaluate Response", size=15, weight=ft.FontWeight.BOLD)],
@@ -332,13 +361,36 @@ def main(page: ft.Page, nav=None):
         ),
         width=200,
         height=48,
+        disabled=True,
         style=ft.ButtonStyle(
-            bgcolor=BUTTON_PRIMARY_BG,
-            color=BUTTON_PRIMARY_TEXT,
+            bgcolor=DISABLED_BG,
+            color=DISABLED_TEXT,
             shape=ft.RoundedRectangleBorder(radius=8),
         ),
         on_click=on_evaluate,
     )
+
+    def update_evaluate_button_state(e=None):
+        is_valid = bool(
+            (prompt_field.value or "").strip()
+            and (criterion1_field.value or "").strip()
+            and (criterion2_field.value or "").strip()
+            and (criterion3_field.value or "").strip()
+            and (criterion4_field.value or "").strip()
+        )
+        evaluate_btn.disabled = not is_valid
+        evaluate_btn.style = ft.ButtonStyle(
+            bgcolor=BUTTON_PRIMARY_BG if is_valid else DISABLED_BG,
+            color=BUTTON_PRIMARY_TEXT if is_valid else DISABLED_TEXT,
+            shape=ft.RoundedRectangleBorder(radius=8),
+        )
+        evaluate_btn.update()
+
+    prompt_field.on_change = update_evaluate_button_state
+    criterion1_field.on_change = update_evaluate_button_state
+    criterion2_field.on_change = update_evaluate_button_state
+    criterion3_field.on_change = update_evaluate_button_state
+    criterion4_field.on_change = update_evaluate_button_state
 
     evaluate_instruction = ft.Text(
         "Complete all rubric criteria, upload at least one PDF, and enter a prompt to continue.",
@@ -352,7 +404,7 @@ def main(page: ft.Page, nav=None):
         [
             ft.Text("• Each student PDF is extracted and encoded into BERT semantic vectors", size=12, color=TEXT_SECONDARY),
             ft.Text("• Cosine similarity is calculated per rubric criterion for every response", size=12, color=TEXT_SECONDARY),
-            ft.Text("• Each student receives an indicator classification, results saved to dashboard", size=12, color=TEXT_SECONDARY),
+            ft.Text("• Each student receives an independent classification — results are saved to your dashboard", size=12, color=TEXT_SECONDARY),
         ],
         spacing=4,
     )

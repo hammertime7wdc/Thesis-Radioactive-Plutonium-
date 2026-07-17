@@ -75,43 +75,63 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     user_id = user.user.id
     user_email = user.user.email
 
+    # Dictionary state to allow updating inside async thread and callbacks
+    state = {
+        "loading": True,
+        "is_admin": role == "admin",
+        "display_name": "User",
+        "display_email": user_email,
+        "display_department": "",
+        "display_institution": "",
+        "display_bio": "",
+        "display_avatar_url": "",
+        "evaluations_count": 0,
+        "member_since": "Loading...",
+        "member_since": "Loading...",
+        "activities": []
+    }
+
+    # Fetch user profile data synchronously to avoid loading spinner flash
     try:
+        # 1. Fetch profile
         supabase = get_supabase_client()
         profile_response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-        profile_data = profile_response.data
-    except Exception:
-        profile_data = {}
-
-    # Fetch evaluations count
-    evaluations_count = 0
-    try:
-        supabase = get_supabase_client()
+        p_data = profile_response.data if profile_response.data else {}
+        
+        # 2. Fetch evaluations count
         eval_response = supabase.table("evaluations").select("id", count="exact").eq("user_id", user_id).execute()
-        evaluations_count = eval_response.count if eval_response.count else 0
-    except Exception:
-        evaluations_count = 0
+        e_count = eval_response.count if eval_response.count else 0
+        
+        # 3. Fetch activities
+        recent_acts = get_recent_activities(user_id, limit=3)
+        
+        # 4. Format date
+        created_at = p_data.get("created_at", "")
+        m_since = "N/A"
+        if created_at:
+            try:
+                from datetime import datetime
+                if isinstance(created_at, str):
+                    m_since = datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%b %Y')
+                else:
+                    m_since = str(created_at)[:7]
+            except:
+                m_since = "N/A"
 
-    is_admin = profile_data.get("role", "evaluator") == "admin"
-    display_name = profile_data.get("name", "User")
-    display_email = profile_data.get("email", user_email)
-    display_department = profile_data.get("department", "")
-    display_institution = profile_data.get("institution", "")
-    display_bio = profile_data.get("bio", "")
-    display_avatar_url = profile_data.get("avatar_url", "")
-    
-    # Format member since date
-    created_at = profile_data.get("created_at", "")
-    if created_at:
-        try:
-            from datetime import datetime
-            if isinstance(created_at, str):
-                member_since = datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%b %Y')
-            else:
-                member_since = str(created_at)[:7]  # YYYY-MM format
-        except:
-            member_since = "N/A"
-    else:
-        member_since = "N/A"
+        # Update state dict
+        state["profile_data"] = p_data
+        state["is_admin"] = p_data.get("role", "evaluator") == "admin"
+        state["display_name"] = p_data.get("name", "User")
+        state["display_email"] = p_data.get("email", user_email)
+        state["display_department"] = p_data.get("department", "")
+        state["display_institution"] = p_data.get("institution", "")
+        state["display_bio"] = p_data.get("bio", "")
+        state["display_avatar_url"] = p_data.get("avatar_url", "")
+        state["evaluations_count"] = e_count
+        state["member_since"] = m_since
+        state["activities"] = recent_acts
+    except Exception as e:
+        print(f"Profile load error: {e}")
 
     # ---------- compact building blocks ----------
 
@@ -171,13 +191,13 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
 
     def role_pill():
-        role_icon = ft.Icons.SHIELD_OUTLINED if is_admin else ft.Icons.MENU_BOOK_OUTLINED
+        role_icon = ft.Icons.SHIELD_OUTLINED if state["is_admin"] else ft.Icons.MENU_BOOK_OUTLINED
         return ft.Container(
             content=ft.Row(
                 [
                     ft.Icon(role_icon, size=12, color=TEXT_SECONDARY),
                     ft.Container(width=4),
-                    ft.Text("Admin" if is_admin else "Evaluator", size=11, weight=ft.FontWeight.W_600, color=TEXT_SECONDARY),
+                    ft.Text("Admin" if state["is_admin"] else "Evaluator", size=11, weight=ft.FontWeight.W_600, color=TEXT_SECONDARY),
                 ],
                 spacing=0,
                 tight=True,
@@ -205,20 +225,18 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     def go_back(e):
         if not nav:
             return
-        if is_admin and hasattr(nav, "navigate_to_admin"):
+        if state["is_admin"] and hasattr(nav, "navigate_to_admin"):
             nav.navigate_to_admin()
         elif hasattr(nav, "navigate_to_short_answer"):
             nav.navigate_to_short_answer()
 
     def update_profile(e):
-        nonlocal display_name, display_email, display_department, display_institution, display_bio
-        
         # Get values from form fields (direct TextField references)
-        new_name = name_field_ref.value if name_field_ref else display_name
-        new_email = email_field_ref.value if email_field_ref else display_email
-        new_department = department_field_ref.value if department_field_ref else display_department
-        new_institution = institution_field_ref.value if institution_field_ref else display_institution
-        new_bio = bio_field_ref.value if bio_field_ref else display_bio
+        new_name = name_field_ref.value if name_field_ref else state["display_name"]
+        new_email = email_field_ref.value if email_field_ref else state["display_email"]
+        new_department = department_field_ref.value if department_field_ref else state["display_department"]
+        new_institution = institution_field_ref.value if institution_field_ref else state["display_institution"]
+        new_bio = bio_field_ref.value if bio_field_ref else state["display_bio"]
         
         try:
             supabase = get_supabase_client()
@@ -231,17 +249,17 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             }
             
             # Include avatar URL if it was updated
-            if display_avatar_url:
-                update_data["avatar_url"] = display_avatar_url
+            if state["display_avatar_url"]:
+                update_data["avatar_url"] = state["display_avatar_url"]
             
             supabase.table("profiles").update(update_data).eq("id", user_id).execute()
 
             # Update display variables after successful save
-            display_name = new_name
-            display_email = new_email
-            display_department = new_department
-            display_institution = new_institution
-            display_bio = new_bio
+            state["display_name"] = new_name
+            state["display_email"] = new_email
+            state["display_department"] = new_department
+            state["display_institution"] = new_institution
+            state["display_bio"] = new_bio
 
             # Log the activity (disabled - RLS errors)
             # log_activity(user_id, "profile_update", "Updated profile details")
@@ -268,7 +286,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         picker.pick_files(allowed_extensions=["jpg", "jpeg", "png", "gif", "webp"])
 
     def upload_avatar(file_path):
-        nonlocal display_avatar_url
         
         try:
             # Check if Cloudinary is configured
@@ -299,7 +316,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             
             avatar_url = upload_result.get("secure_url")
             if avatar_url:
-                display_avatar_url = avatar_url
+                state["display_avatar_url"] = avatar_url
                 avatar_image.src = avatar_url
                 avatar_image.visible = True
                 
@@ -381,8 +398,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         nonlocal avatar_image, name_field_ref, email_field_ref, department_field_ref, institution_field_ref, bio_field_ref
         
         # Set avatar image if URL exists
-        if display_avatar_url:
-            avatar_image.src = display_avatar_url
+        if state["display_avatar_url"]:
+            avatar_image.src = state["display_avatar_url"]
             avatar_image.visible = True
         else:
             avatar_image.visible = False
@@ -391,8 +408,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         avatar_container = ft.Stack(
             [
                 ft.Container(
-                    content=avatar_image if display_avatar_url else ft.Text(
-                        display_name[0].upper() if display_name else "A",
+                    content=avatar_image if state["display_avatar_url"] else ft.Text(
+                        state["display_name"][0].upper() if state["display_name"] else "A",
                         size=26,
                         weight=ft.FontWeight.BOLD,
                         color=TEXT_WHITE
@@ -400,7 +417,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                     width=64,
                     height=64,
                     border_radius=32,
-                    bgcolor=PRIMARY_BLUE if not display_avatar_url else None,
+                    bgcolor=PRIMARY_BLUE if not state["display_avatar_url"] else None,
                     alignment=ft.alignment.center,
                 ),
                 ft.Container(
@@ -420,15 +437,15 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             width=64,
             height=64,
         )
-
+ 
         info_row = ft.Row(
             [
                 avatar_container,
                 ft.Container(width=14),
                 ft.Column(
                     [
-                        ft.Text(display_name, size=16, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                        ft.Text(display_email, size=12, color=TEXT_SECONDARY),
+                        ft.Text(state["display_name"], size=16, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                        ft.Text(state["display_email"], size=12, color=TEXT_SECONDARY),
                         ft.Container(height=4),
                         role_pill(),
                         ft.Container(height=2),
@@ -439,9 +456,9 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
-
-        # Fetch recent activities
-        activities = get_recent_activities(user_id, limit=3)
+ 
+        # Use pre-loaded activities from state to avoid transition lag
+        activities = state["activities"]
         
         # Build activity list
         activity_items = []
@@ -479,7 +496,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
         # Create TextField objects directly and store references
         name_field_ref = ft.TextField(
-            value=display_name,
+            value=state["display_name"],
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -491,7 +508,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
         
         email_field_ref = ft.TextField(
-            value=display_email,
+            value=state["display_email"],
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -503,7 +520,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
         
         department_field_ref = ft.TextField(
-            value=display_department,
+            value=state["display_department"],
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -515,7 +532,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
         
         institution_field_ref = ft.TextField(
-            value=display_institution,
+            value=state["display_institution"],
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -527,7 +544,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
         
         bio_field_ref = ft.TextField(
-            value=display_bio,
+            value=state["display_bio"],
             width=594,
             multiline=True,
             min_lines=2,
@@ -677,13 +694,13 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 ft.Column(
                     [
                         ft.Row([ft.Icon(ft.Icons.BOOKMARK_BORDER, size=15, color=TEXT_TERTIARY), ft.Container(width=8), ft.Text("Evaluations", size=12, color=TEXT_TERTIARY)], spacing=0),
-                        ft.Text(str(evaluations_count), size=14, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                        ft.Text(str(state["evaluations_count"]), size=14, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                         ft.Container(height=12),
-                        ft.Row([ft.Icon(ft.Icons.SHIELD_OUTLINED if is_admin else ft.Icons.MENU_BOOK_OUTLINED, size=15, color=TEXT_TERTIARY), ft.Container(width=8), ft.Text("Role", size=12, color=TEXT_TERTIARY)], spacing=0),
-                        ft.Text("Admin" if is_admin else "Evaluator", size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                        ft.Row([ft.Icon(ft.Icons.SHIELD_OUTLINED if state["is_admin"] else ft.Icons.MENU_BOOK_OUTLINED, size=15, color=TEXT_TERTIARY), ft.Container(width=8), ft.Text("Role", size=12, color=TEXT_TERTIARY)], spacing=0),
+                        ft.Text("Admin" if state["is_admin"] else "Evaluator", size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
                         ft.Container(height=12),
                         ft.Row([ft.Icon(ft.Icons.CALENDAR_MONTH_OUTLINED, size=15, color=TEXT_TERTIARY), ft.Container(width=8), ft.Text("Member since", size=12, color=TEXT_TERTIARY)], spacing=0),
-                        ft.Text(member_since, size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                        ft.Text(state["member_since"], size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
                     ],
                     spacing=0,
                 ),
@@ -723,7 +740,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
     def back_button():
         return ft.TextButton(
-            "Back to admin" if is_admin else "Back to dashboard",
+            "Back to admin" if state["is_admin"] else "Back to dashboard",
             icon=ft.Icons.ARROW_BACK,
             style=ft.ButtonStyle(color=TEXT_SECONDARY, padding=ft.padding.all(0)),
             on_click=go_back,
