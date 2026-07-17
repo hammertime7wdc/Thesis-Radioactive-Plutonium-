@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import time
 import flet as ft
 from screens.ui_admin import main as admin_main
 from screens.ui_admin_settings_audit import main as settings_audit_main
@@ -14,6 +15,9 @@ from utils.utils import (
     BORDER_COLOR
 )
 from services.session_manager import get_current_user
+
+# Duration (ms) for the fade-out and fade-in halves of the transition.
+_FADE_MS = 150
 
 
 class AdminNavigation:
@@ -30,6 +34,10 @@ class AdminNavigation:
         self.is_admin_mode = False
         self.app_bar = None
         self.loading_overlay = None
+        # Persistent wrapper for smooth fade transitions within admin tabs.
+        self._content_wrapper = None
+        # Transition ID to prevent race conditions during navigation
+        self._transition_id = 0
     
     def create_admin_app_bar(self):
         """Create shared app bar for admin screens"""
@@ -348,7 +356,11 @@ class AdminNavigation:
                 tab_index += 1
 
     def _swap_content(self, content_loader):
-        """Swap only the main content area, keeping header and nav bar in place"""
+        """Swap only the main content area with a smooth fade transition,
+        keeping header and nav bar in place."""
+        self._transition_id += 1
+        current_id = self._transition_id
+
         # Set page configurations (idempotent)
         self.page.window_width = 1200
         self.page.window_height = 800
@@ -357,9 +369,11 @@ class AdminNavigation:
         self.page.theme_mode = ft.ThemeMode.LIGHT
 
         if not self.is_admin_mode:
-            # First time entering admin: clean everything and build full layout
+            # ----- First time entering admin: clean everything and build full layout -----
+            self.page.appbar = None
             self.page.clean()
             self.is_admin_mode = True
+            self.main_content = None
             self.create_admin_app_bar()
 
             # 1. Admin Header
@@ -370,23 +384,77 @@ class AdminNavigation:
             self.create_secondary_nav_bar()
             self.page.add(self.secondary_nav)
 
-            # 3. Load content
+            # 3. Build the persistent content wrapper with fade animation
+            self._content_wrapper = ft.Container(
+                opacity=0,
+                animate_opacity=ft.Animation(_FADE_MS, ft.AnimationCurve.EASE_IN_OUT),
+                expand=True,
+            )
+            self.page.add(self._content_wrapper)
+
+            # 4. Load content, capture it into the wrapper
             content_loader()
+            captured_content = self.main_content
+            if captured_content and captured_content in self.page.controls:
+                self.page.controls.remove(captured_content)
+            
+            if current_id != self._transition_id:
+                return
+                
+            if self._content_wrapper:
+                self._content_wrapper.content = captured_content
+            elif captured_content:
+                # Fallback if wrapper is missing
+                self.page.add(captured_content)
+
+            # Fade in
+            if self._content_wrapper:
+                self._content_wrapper.opacity = 1
             self.page.update()
         else:
-            # Subsequent tab switches: only remove old content and update tabs in-place
-            if self.main_content and self.main_content in self.page.controls:
-                try:
-                    self.page.remove(self.main_content)
-                except ValueError:
-                    pass
-                self.main_content = None
+            # ----- Subsequent tab switches -----
+            if self._content_wrapper is None:
+                # Safety: wrapper was lost somehow, rebuild
+                self.is_admin_mode = False
+                return self._swap_content(content_loader)
 
-            # Update tab active states in-place (no remove/re-add)
+            # Fade out current content
+            self._content_wrapper.opacity = 0
+            self.page.update()
+            time.sleep(_FADE_MS / 1000)
+
+            # Abort if another navigation occurred during the sleep
+            if current_id != self._transition_id:
+                return
+
+            # Update tab active states in-place
             self._update_tab_styles()
 
-            # Load new content (it will page.add itself and set self.main_content)
+            # Remove any stray controls that screens may have added directly
+            # (keep header at 0, tab bar at 1, wrapper at 2)
+            while len(self.page.controls) > 3:
+                self.page.controls.pop()
+
+            # Load new content
+            self.main_content = None
             content_loader()
+
+            # Capture the new content into the wrapper
+            captured_content = self.main_content
+            if captured_content and captured_content in self.page.controls:
+                self.page.controls.remove(captured_content)
+                
+            if current_id != self._transition_id:
+                return
+
+            if self._content_wrapper:
+                self._content_wrapper.content = captured_content
+            elif captured_content:
+                self.page.add(captured_content)
+
+            # Fade in
+            if self._content_wrapper:
+                self._content_wrapper.opacity = 1
             self.page.update()
 
     def navigate_to_users(self):
@@ -411,6 +479,7 @@ class AdminNavigation:
 
     def navigate_to_account(self):
         """Navigate to account settings screen"""
+        self._transition_id += 1
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 1500
@@ -420,6 +489,7 @@ class AdminNavigation:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.is_admin_mode = False
         self.app_bar = None
+        self._content_wrapper = None
         account_main(self.page, self, role="admin")
         self.page.update()
 
@@ -429,6 +499,7 @@ class AdminNavigation:
 
     def navigate_to_login(self):
         from screens.ui_login import main as login_main
+        self._transition_id += 1
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 900
@@ -438,6 +509,7 @@ class AdminNavigation:
         self.page.theme_mode = ft.ThemeMode.DARK
         self.is_evaluation_mode = False
         self.is_admin_mode = False
+        self._content_wrapper = None
         self.page.update()
         from navigation.navigation import Navigation
         login_main(self.page, self.parent_nav if self.parent_nav else Navigation(self.page))
