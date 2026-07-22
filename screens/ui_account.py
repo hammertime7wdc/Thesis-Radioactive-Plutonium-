@@ -13,6 +13,14 @@ import cloudinary
 import cloudinary.uploader
 from dotenv import load_dotenv
 
+try:
+    from database.auth import send_password_reset_email, reset_password_with_token
+except ModuleNotFoundError:
+    def send_password_reset_email(email: str):
+        return False, "Database not available"
+    def reset_password_with_token(token: str, new_password: str):
+        return False, "Database not available"
+
 load_dotenv()
 
 # Configure Cloudinary
@@ -63,6 +71,9 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     page.theme_mode = ft.ThemeMode.LIGHT
 
     active_tab = {"value": "profile"}
+    # "form" = enter current/new/confirm password; "verify" = enter emailed code
+    security_step = {"value": "form"}
+    pending_new_password = {"value": ""}
 
     # Load user profile from Supabase
     user = get_current_user()
@@ -208,9 +219,39 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             border_radius=999,
         )
 
-    current_password = ft.TextField(hint_text="Current password", password=True, can_reveal_password=True, width=520, height=42, border_radius=8, bgcolor=INPUT_BG, border_color=INPUT_BORDER, focused_border_color=PRIMARY_BLUE, text_size=13, content_padding=ft.padding.symmetric(horizontal=12, vertical=8))
-    new_password = ft.TextField(hint_text="Min. 6 characters", password=True, can_reveal_password=True, width=520, height=42, border_radius=8, bgcolor=INPUT_BG, border_color=INPUT_BORDER, focused_border_color=PRIMARY_BLUE, text_size=13, content_padding=ft.padding.symmetric(horizontal=12, vertical=8))
-    confirm_password = ft.TextField(hint_text="Confirm new password", password=True, can_reveal_password=True, width=520, height=42, border_radius=8, bgcolor=INPUT_BG, border_color=INPUT_BORDER, focused_border_color=PRIMARY_BLUE, text_size=13, content_padding=ft.padding.symmetric(horizontal=12, vertical=8))
+    # ── Security tab fields (persist across re-renders of this tab) ──
+    def _security_field(hint, password=False, read_only=False):
+        return ft.TextField(
+            hint_text=hint,
+            password=password,
+            can_reveal_password=password,
+            read_only=read_only,
+            value=user_email if read_only else None,
+            width=520,
+            height=42,
+            border_radius=8,
+            bgcolor=INPUT_BG,
+            border_color=INPUT_BORDER,
+            focused_border_color=PRIMARY_BLUE,
+            text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        )
+
+    reset_email_field = _security_field("Email address", read_only=True)
+    current_password = _security_field("Current password", password=True)
+    new_password = _security_field("Min. 8 chars: 1 lowercase, 1 uppercase, 1 number, 1 special", password=True)
+    confirm_password = _security_field("Confirm new password", password=True)
+    code_field = ft.TextField(
+        hint_text="Enter the 6-digit code sent to your email",
+        width=520,
+        height=42,
+        border_radius=8,
+        bgcolor=INPUT_BG,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
+        text_size=13,
+        content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+    )
     security_message = ft.Text("", size=12, color=SUCCESS, visible=False)
 
     notifications_email = ft.Switch(value=True, active_color=PRIMARY_BLUE)
@@ -229,6 +270,13 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             nav.navigate_to_admin()
         elif hasattr(nav, "navigate_to_short_answer"):
             nav.navigate_to_short_answer()
+
+    def refresh_recent_activity():
+        try:
+            state["activities"] = get_recent_activities(user_id, limit=5)
+        except Exception as ex:
+            print(f"Activity refresh error: {ex}")
+            state["activities"] = []
 
     def update_profile(e):
         # Get values from form fields (direct TextField references)
@@ -261,8 +309,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             state["display_institution"] = new_institution
             state["display_bio"] = new_bio
 
-            # Log the activity (disabled - RLS errors)
-            # log_activity(user_id, "profile_update", "Updated profile details")
+            log_activity(user_id, "profile_update", "Updated profile details")
+            refresh_recent_activity()
 
             profile_message.value = "Profile changes saved."
             profile_message.visible = True
@@ -324,12 +372,12 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 upload_message.value = "Avatar uploaded successfully!"
                 upload_message.color = SUCCESS
                 
+                log_activity(user_id, "avatar_upload", "Updated profile avatar")
+                refresh_recent_activity()
+
                 # Re-render profile view to update avatar display
                 render_content()
                 page.update()
-                
-                # Log the activity (disabled - RLS errors)
-                # log_activity(user_id, "avatar_upload", "Updated profile avatar")
             else:
                 raise Exception("No URL returned from Cloudinary")
             
@@ -346,9 +394,12 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             upload_message.color = ft.Colors.RED_500
             page.update()
 
-    def update_password(e):
+    # ── Step 1: verify current password + validate new password, then email a code ──
+    def send_verification_code(e):
+        security_message.visible = False
+
         if not current_password.value or not new_password.value or not confirm_password.value:
-            security_message.value = "Please fill in all password fields."
+            security_message.value = "Please fill in your current password and the new password fields."
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
             page.update()
@@ -359,8 +410,11 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             security_message.visible = True
             page.update()
             return
-        if len(new_password.value) < 6:
-            security_message.value = "Password must be at least 6 characters."
+
+        from database.auth import validate_password as validate_account_password
+        is_valid, password_error = validate_account_password(new_password.value)
+        if not is_valid:
+            security_message.value = password_error
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
             page.update()
@@ -368,19 +422,76 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
         try:
             supabase = get_supabase_client()
-            supabase.auth.update_user({
-                "password": new_password.value
+            supabase.auth.sign_in_with_password({
+                "email": user_email,
+                "password": current_password.value,
             })
-
-            security_message.value = "Password updated successfully."
-            security_message.color = SUCCESS
-            security_message.visible = True
-            page.update()
-        except Exception as ex:
-            security_message.value = f"Error updating password: {str(ex)}"
+        except Exception:
+            security_message.value = "Current password is incorrect."
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
             page.update()
+            return
+
+        success, resp = send_password_reset_email(reset_email_field.value or user_email)
+        if success:
+            pending_new_password["value"] = new_password.value
+            security_step["value"] = "verify"
+            security_message.value = "Verification code sent to your email."
+            security_message.color = SUCCESS
+            security_message.visible = True
+            render_content()
+        else:
+            security_message.value = resp
+            security_message.color = ft.Colors.RED_500
+            security_message.visible = True
+        page.update()
+
+    # ── Step 2: verify the emailed code, then finalize the password change ──
+    def verify_and_update(e):
+        security_message.visible = False
+
+        if not code_field.value:
+            security_message.value = "Please enter the verification code."
+            security_message.color = ft.Colors.RED_500
+            security_message.visible = True
+            page.update()
+            return
+
+        password_to_set = pending_new_password["value"] or new_password.value
+        if not password_to_set:
+            security_message.value = "Please send a reset code first."
+            security_message.color = ft.Colors.RED_500
+            security_message.visible = True
+            page.update()
+            return
+
+        ok, msg = reset_password_with_token(code_field.value, password_to_set)
+        if ok:
+            security_message.value = "Password updated successfully."
+            security_message.color = SUCCESS
+            log_activity(user_id, "password_change", "Changed account password")
+            refresh_recent_activity()
+            # Reset everything back to step 1, cleared
+            current_password.value = ""
+            new_password.value = ""
+            confirm_password.value = ""
+            code_field.value = ""
+            pending_new_password["value"] = ""
+            security_step["value"] = "form"
+            render_content()
+        else:
+            security_message.value = msg
+            security_message.color = ft.Colors.RED_500
+        security_message.visible = True
+        page.update()
+
+    def back_to_password_form(e):
+        security_step["value"] = "form"
+        security_message.visible = False
+        code_field.value = ""
+        render_content()
+        page.update()
 
     profile_message = ft.Text("", size=12, color=SUCCESS, visible=False)
 
@@ -393,6 +504,45 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     avatar_image = ft.Image(width=64, height=64, fit=ft.ImageFit.COVER, border_radius=32)
     upload_progress = ft.ProgressBar(visible=False)
     upload_message = ft.Text("", size=11, color=TEXT_SECONDARY, visible=False)
+
+    def build_recent_activity_section():
+        activities = state.get("activities", []) or []
+        activity_items = [
+            ft.Text("Recent Activity", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+            ft.Container(height=10),
+        ]
+
+        if activities:
+            for activity in activities:
+                icon_map = {
+                    'profile_update': ft.Icons.EDIT_OUTLINED,
+                    'avatar_upload': ft.Icons.CAMERA_ALT_OUTLINED,
+                    'password_change': ft.Icons.LOCK_OUTLINED,
+                    'default': ft.Icons.HISTORY_OUTLINED,
+                }
+                icon = icon_map.get(activity.get('activity_type'), icon_map['default'])
+                description = activity.get('description', 'Unknown activity')
+                activity_items.append(
+                    ft.Row(
+                        [
+                            ft.Icon(icon, size=16, color=TEXT_SECONDARY),
+                            ft.Container(width=10),
+                            ft.Text(description, size=12, color=TEXT_PRIMARY),
+                        ],
+                        spacing=0,
+                    )
+                )
+                activity_items.append(ft.Container(height=8))
+        else:
+            activity_items.append(ft.Text("No recent activity", size=12, color=TEXT_SECONDARY))
+
+        return ft.Container(
+            content=ft.Column(activity_items, spacing=0),
+            padding=ft.padding.all(16),
+            bgcolor=SECTION_BG_COLOR,
+            border_radius=10,
+            border=ft.border.all(1, BORDER_COLOR),
+        )
 
     def profile_view():
         nonlocal avatar_image, name_field_ref, email_field_ref, department_field_ref, institution_field_ref, bio_field_ref
@@ -457,42 +607,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
  
-        # Use pre-loaded activities from state to avoid transition lag
-        activities = state["activities"]
-        
-        # Build activity list
-        activity_items = []
-        if activities:
-            activity_items.append(ft.Text("Recent Activity", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY))
-            activity_items.append(ft.Container(height=10))
-            
-            for activity in activities:
-                # Map activity types to icons
-                icon_map = {
-                    'profile_update': ft.Icons.EDIT_OUTLINED,
-                    'avatar_upload': ft.Icons.CAMERA_ALT_OUTLINED,
-                    'password_change': ft.Icons.LOCK_OUTLINED,
-                    'default': ft.Icons.HISTORY_OUTLINED
-                }
-                icon = icon_map.get(activity.get('activity_type'), icon_map['default'])
-                
-                description = activity.get('description', 'Unknown activity')
-                activity_items.append(
-                    ft.Row([ft.Icon(icon, size=16, color=TEXT_SECONDARY), ft.Container(width=10), ft.Text(description, size=12, color=TEXT_PRIMARY)], spacing=0)
-                )
-                activity_items.append(ft.Container(height=8))
-        else:
-            activity_items.append(ft.Text("Recent Activity", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY))
-            activity_items.append(ft.Container(height=10))
-            activity_items.append(ft.Text("No recent activity", size=12, color=TEXT_SECONDARY))
-        
-        recent_activity = ft.Container(
-            content=ft.Column(activity_items, spacing=0),
-            padding=ft.padding.all(16),
-            bgcolor=SECTION_BG_COLOR,
-            border_radius=10,
-            border=ft.border.all(1, BORDER_COLOR),
-        )
+        recent_activity = build_recent_activity_section()
 
         # Create TextField objects directly and store references
         name_field_ref = ft.TextField(
@@ -625,41 +740,87 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         )
 
     def security_view():
-        return ft.Column(
-            [
-                ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                ft.Container(height=16),
-                ft.Text("Current Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
-                ft.Container(height=4),
-                current_password,
-                ft.Container(height=12),
-                ft.Text("New Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
-                ft.Container(height=4),
-                new_password,
-                ft.Container(height=12),
-                ft.Text("Confirm New Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
-                ft.Container(height=4),
-                confirm_password,
-                ft.Container(height=12),
-                security_message,
-                ft.Container(height=14),
-                ft.Row(
-                    [
-                        ft.Container(expand=True),
-                        ft.ElevatedButton(
-                            "Update Password",
-                            width=150,
-                            height=38,
-                            bgcolor=BUTTON_PRIMARY_BG,
-                            color=BUTTON_PRIMARY_TEXT,
-                            style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
-                            on_click=update_password,
-                        ),
-                    ]
-                ),
-            ],
-            spacing=0,
-        )
+        if security_step["value"] == "form":
+            return ft.Column(
+                [
+                    ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                    ft.Container(height=10),
+                    ft.Text("We’ll send a reset code to your email, then you can choose a new password.", size=12, color=TEXT_SECONDARY),
+                    ft.Container(height=16),
+                    ft.Text("Email Address", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                    ft.Container(height=4),
+                    reset_email_field,
+                    ft.Container(height=16),
+                    ft.Text("Current Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                    ft.Container(height=4),
+                    current_password,
+                    ft.Container(height=16),
+                    ft.Text("New Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                    ft.Container(height=4),
+                    new_password,
+                    ft.Container(height=16),
+                    ft.Text("Confirm New Password", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                    ft.Container(height=4),
+                    confirm_password,
+                    ft.Container(height=16),
+                    security_message,
+                    ft.Container(height=8),
+                    ft.Row(
+                        [
+                            ft.Container(expand=True),
+                            ft.ElevatedButton(
+                                "Send Reset Code",
+                                width=180,
+                                height=42,
+                                bgcolor=BUTTON_PRIMARY_BG,
+                                color=BUTTON_PRIMARY_TEXT,
+                                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
+                                on_click=send_verification_code,
+                            ),
+                        ]
+                    ),
+                ],
+                spacing=0,
+            )
+        else:
+            return ft.Column(
+                [
+                    ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                    ft.Container(height=10),
+                    ft.Text(
+                        f"We sent a 6-digit code to {reset_email_field.value or user_email}. Enter it below to confirm the change.",
+                        size=12,
+                        color=TEXT_SECONDARY,
+                    ),
+                    ft.Container(height=16),
+                    ft.Text("Verification Code", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                    ft.Container(height=4),
+                    code_field,
+                    ft.Container(height=16),
+                    security_message,
+                    ft.Container(height=8),
+                    ft.Row(
+                        [
+                            ft.TextButton(
+                                "Back",
+                                style=ft.ButtonStyle(color=TEXT_SECONDARY),
+                                on_click=back_to_password_form,
+                            ),
+                            ft.Container(expand=True),
+                            ft.ElevatedButton(
+                                "Update Password",
+                                width=160,
+                                height=42,
+                                bgcolor=BUTTON_PRIMARY_BG,
+                                color=BUTTON_PRIMARY_TEXT,
+                                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
+                                on_click=verify_and_update,
+                            ),
+                        ]
+                    ),
+                ],
+                spacing=0,
+            )
 
     def notifications_view():
         return ft.Column(
@@ -748,21 +909,24 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
     render_content()
 
-    page.add(
-        ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(height=16),
-                    ft.Row([top_header, ft.Container(expand=True), back_button()], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Container(height=8),
-                    card,
-                    ft.Container(height=24),
-                ],
-                spacing=0,
-            ),
-            padding=ft.padding.symmetric(horizontal=32, vertical=0),
-        )
+    main_content = ft.Container(
+        content=ft.Column(
+            [
+                ft.Container(height=16),
+                ft.Row([top_header, ft.Container(expand=True), back_button()], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Container(height=8),
+                card,
+                ft.Container(height=24),
+            ],
+            spacing=0,
+        ),
+        padding=ft.padding.symmetric(horizontal=32, vertical=0),
     )
+
+    if nav:
+        nav.main_content = main_content
+    else:
+        page.add(main_content)
 
 
 if __name__ == "__main__":

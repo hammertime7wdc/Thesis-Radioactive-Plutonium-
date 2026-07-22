@@ -650,7 +650,6 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
 
     if nav and getattr(nav, "is_evaluation_mode", False):
         nav.main_content = layout
-        page.add(layout)
     else:
         page.add(layout)
 

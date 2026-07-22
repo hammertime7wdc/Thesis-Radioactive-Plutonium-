@@ -240,9 +240,10 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         ),
     )
 
-    page.add(main_content)
     if nav:
         nav.main_content = main_content
+    else:
+        page.add(main_content)
 
 if __name__ == "__main__":
     ft.app(target=main)
