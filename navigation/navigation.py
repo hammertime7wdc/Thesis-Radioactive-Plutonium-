@@ -228,6 +228,15 @@ class Navigation:
     def navigate_to_login(self):
         """Navigate to login screen"""
         self._transition_id += 1
+        
+        # Smooth fade out before changing the screen
+        if self.page.controls:
+            for c in self.page.controls:
+                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                c.opacity = 0
+            self.page.update()
+            time.sleep(0.2)
+            
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 900
@@ -239,7 +248,7 @@ class Navigation:
         self.is_admin_mode = False
         self.app_bar = None
         self._content_wrapper = None
-        self.page.update()
+        # Don't call page.update() with empty page — login_main adds content and updates
         login_main(self.page, self)
 
     def navigate_to_reset_password(self):
@@ -294,12 +303,6 @@ class Navigation:
         """Swap the main content area with a smooth fade transition."""
         self._transition_id += 1
         current_id = self._transition_id
-        
-        self.page.window_width = 1200
-        self.page.window_height = 800
-        self.page.padding = 0
-        self.page.bgcolor = "#f8fafc"
-        self.page.theme_mode = ft.ThemeMode.LIGHT
 
         # If coming from admin mode, force a full rebuild
         coming_from_admin = self.admin_nav.is_admin_mode
@@ -313,44 +316,62 @@ class Navigation:
 
         if not self.is_evaluation_mode:
             # ----- First time entering evaluator mode -----
+            
+            # Smooth fade out before changing the screen
+            if self.page.controls:
+                for c in self.page.controls:
+                    c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                    c.opacity = 0
+                self.page.update()
+                time.sleep(0.2)
+
+            # Configure page properties
+            self.page.window_width = 1200
+            self.page.window_height = 800
+            self.page.padding = 0
+            self.page.bgcolor = "#f8fafc"
+            self.page.theme_mode = ft.ThemeMode.LIGHT
             self.page.appbar = None
-            self.page.clean()
+            # Use controls.clear() instead of page.clean() to avoid auto-update
+            self.page.controls.clear()
             self.is_evaluation_mode = True
             self.main_content = None
-            self.create_evaluation_app_bar()
 
-            # Build a persistent wrapper that will be reused for future swaps
+            # Build the persistent wrapper (starts fully visible)
             self._content_wrapper = ft.Container(
-                opacity=0,
+                opacity=1,
                 animate_opacity=ft.Animation(_FADE_MS, ft.AnimationCurve.EASE_IN_OUT),
                 expand=True,
             )
-            self.page.add(self._content_wrapper)
 
-            # Load screen content into a temporary holder so we can capture it
+            # Load screen content – screen sets self.main_content but does NOT page.add()
             content_loader()
-            # The screen did page.add(main_content) and set self.main_content.
-            # Move it from page.controls into our wrapper.
             captured_content = self.main_content
+            # Safety: remove from page.controls if the screen added it anyway
             if captured_content and captured_content in self.page.controls:
                 self.page.controls.remove(captured_content)
                 
             if current_id != self._transition_id:
                 return
-                
+
+            # Place content inside the wrapper
             if self._content_wrapper:
                 self._content_wrapper.content = captured_content
-            elif captured_content:
-                self.page.add(captured_content)
 
-            # Fade in
+            # Build the app bar (sets self.page.appbar)
+            self.create_evaluation_app_bar()
+            
+            # Append wrapper to page controls (no auto-update)
             if self._content_wrapper:
-                self._content_wrapper.opacity = 1
+                self.page.controls.append(self._content_wrapper)
+            elif captured_content:
+                self.page.controls.append(captured_content)
+
+            # Single atomic update: bgcolor + appbar + content all rendered at once
             self.page.update()
         else:
             # ----- Subsequent switches (within evaluator mode) -----
             if self._content_wrapper is None:
-                # Safety: wrapper was lost somehow, rebuild
                 self.is_evaluation_mode = False
                 return self._swap_evaluator_content(content_loader)
 
@@ -359,15 +380,13 @@ class Navigation:
             self.page.update()
             time.sleep(_FADE_MS / 1000)
 
-            # Abort if another navigation occurred during the sleep
             if current_id != self._transition_id:
                 return
 
             # Update nav button highlights
             self._update_appbar_buttons()
 
-            # Remove any stray controls that screens may have added directly
-            # (keep only our wrapper)
+            # Remove any stray controls (keep only our wrapper)
             stray = [c for c in self.page.controls if c is not self._content_wrapper]
             for c in stray:
                 self.page.controls.remove(c)
@@ -376,7 +395,6 @@ class Navigation:
             self.main_content = None
             content_loader()
 
-            # Capture the new content
             captured_content = self.main_content
             if captured_content and captured_content in self.page.controls:
                 self.page.controls.remove(captured_content)
@@ -420,6 +438,15 @@ class Navigation:
     def navigate_to_account(self):
         """Navigate to evaluator account settings"""
         self._transition_id += 1
+        
+        # Smooth fade out before changing the screen
+        if self.page.controls:
+            for c in self.page.controls:
+                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                c.opacity = 0
+            self.page.update()
+            time.sleep(0.2)
+            
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 1500
@@ -430,7 +457,11 @@ class Navigation:
         self.is_evaluation_mode = False
         self.app_bar = None
         self._content_wrapper = None
+        # Load content first, then update once so user never sees empty page
         account_main(self.page, self, role="evaluator")
+        # Account screen sets nav.main_content; add it to page
+        if self.main_content and self.main_content not in self.page.controls:
+            self.page.add(self.main_content)
         self.page.update()
 
     def navigate_to_student_result(self, results=None, academic_prompt=None, rubric=None):

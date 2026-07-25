@@ -63,7 +63,7 @@ class AdminNavigation:
             width=36,
             height=36,
             border_radius=8,
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.Alignment(0, 0),
             shadow=ft.BoxShadow(
                 blur_radius=8,
                 spread_radius=0,
@@ -117,7 +117,7 @@ class AdminNavigation:
                         padding=ft.padding.symmetric(horizontal=16, vertical=10),
                         bgcolor=PRIMARY_BLUE,
                         border_radius=8,
-                        alignment=ft.alignment.center,
+                        alignment=ft.alignment.Alignment(0, 0),
                         on_click=on_admin,
                     ),
                     ft.Container(width=8),
@@ -127,7 +127,7 @@ class AdminNavigation:
                         padding=ft.padding.symmetric(horizontal=16, vertical=10),
                         bgcolor="#f1f5f9",
                         border_radius=8,
-                        alignment=ft.alignment.center,
+                        alignment=ft.alignment.Alignment(0, 0),
                         on_click=on_new_evaluation,
                     ),
                     ft.Container(width=8),
@@ -137,7 +137,7 @@ class AdminNavigation:
                         padding=ft.padding.symmetric(horizontal=16, vertical=10),
                         bgcolor="#f1f5f9",
                         border_radius=8,
-                        alignment=ft.alignment.center,
+                        alignment=ft.alignment.Alignment(0, 0),
                         on_click=on_dashboard,
                     ),
                 ]
@@ -163,7 +163,7 @@ class AdminNavigation:
                                         height=32,
                                         border_radius=16,
                                         bgcolor="#eff6ff",
-                                        alignment=ft.alignment.center,
+                                        alignment=ft.alignment.Alignment(0, 0),
                                     ),
                                     ft.Container(width=10),
                                     ft.Column(
@@ -269,7 +269,7 @@ class AdminNavigation:
             height=36,
             bgcolor="#a855f7",
             border_radius=8,
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.Alignment(0, 0),
         )
 
         admin_header = ft.Container(
@@ -318,7 +318,7 @@ class AdminNavigation:
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             bgcolor="#ffffff",
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.Alignment(0, 0),
             expand=True,
         )
         self.page.add(self.loading_overlay)
@@ -361,36 +361,41 @@ class AdminNavigation:
         self._transition_id += 1
         current_id = self._transition_id
 
-        # Set page configurations (idempotent)
-        self.page.window_width = 1200
-        self.page.window_height = 800
-        self.page.padding = 0
-        self.page.bgcolor = "#f8fafc"
-        self.page.theme_mode = ft.ThemeMode.LIGHT
-
         if not self.is_admin_mode:
             # ----- First time entering admin: clean everything and build full layout -----
+            
+            # Smooth fade out before changing the screen
+            if self.page.controls:
+                for c in self.page.controls:
+                    c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                    c.opacity = 0
+                self.page.update()
+                time.sleep(0.2)
+                
+            # Set page configurations (idempotent)
+            self.page.window_width = 1200
+            self.page.window_height = 800
+            self.page.padding = 0
+            self.page.bgcolor = "#f8fafc"
+            self.page.theme_mode = ft.ThemeMode.LIGHT
+            
             self.page.appbar = None
             self.page.clean()
             self.is_admin_mode = True
             self.main_content = None
-            self.create_admin_app_bar()
 
-            # 1. Admin Header
+            # 1. Admin Header (do not add yet)
             self.admin_header = self.create_admin_header()
-            self.page.add(self.admin_header)
 
-            # 2. Tab bar
+            # 2. Tab bar (do not add yet)
             self.create_secondary_nav_bar()
-            self.page.add(self.secondary_nav)
 
-            # 3. Build the persistent content wrapper with fade animation
+            # 3. Build the persistent content wrapper with opacity=1
             self._content_wrapper = ft.Container(
-                opacity=0,
+                opacity=1,
                 animate_opacity=ft.Animation(_FADE_MS, ft.AnimationCurve.EASE_IN_OUT),
                 expand=True,
             )
-            self.page.add(self._content_wrapper)
 
             # 4. Load content, capture it into the wrapper
             content_loader()
@@ -403,13 +408,17 @@ class AdminNavigation:
                 
             if self._content_wrapper:
                 self._content_wrapper.content = captured_content
+
+            self.create_admin_app_bar()
+            
+            # Now add everything to page in one go
+            self.page.add(self.admin_header, self.secondary_nav)
+            if self._content_wrapper:
+                self.page.add(self._content_wrapper)
             elif captured_content:
                 # Fallback if wrapper is missing
                 self.page.add(captured_content)
 
-            # Fade in
-            if self._content_wrapper:
-                self._content_wrapper.opacity = 1
             self.page.update()
         else:
             # ----- Subsequent tab switches -----
@@ -480,6 +489,15 @@ class AdminNavigation:
     def navigate_to_account(self):
         """Navigate to account settings screen"""
         self._transition_id += 1
+        
+        # Smooth fade out before changing the screen
+        if self.page.controls:
+            for c in self.page.controls:
+                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                c.opacity = 0
+            self.page.update()
+            time.sleep(0.2)
+            
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 1500
@@ -490,7 +508,11 @@ class AdminNavigation:
         self.is_admin_mode = False
         self.app_bar = None
         self._content_wrapper = None
+        # Load content first, then update once so user never sees empty page
         account_main(self.page, self, role="admin")
+        # Account screen sets nav.main_content; add it to page
+        if self.main_content and self.main_content not in self.page.controls:
+            self.page.add(self.main_content)
         self.page.update()
 
     def navigate_to_admin(self):
@@ -500,6 +522,15 @@ class AdminNavigation:
     def navigate_to_login(self):
         from screens.ui_login import main as login_main
         self._transition_id += 1
+        
+        # Smooth fade out before changing the screen
+        if self.page.controls:
+            for c in self.page.controls:
+                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                c.opacity = 0
+            self.page.update()
+            time.sleep(0.2)
+            
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 900
@@ -510,7 +541,7 @@ class AdminNavigation:
         self.is_evaluation_mode = False
         self.is_admin_mode = False
         self._content_wrapper = None
-        self.page.update()
+        # Don't call page.update() with empty page — login_main adds content and updates
         from navigation.navigation import Navigation
         login_main(self.page, self.parent_nav if self.parent_nav else Navigation(self.page))
 
