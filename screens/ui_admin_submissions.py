@@ -64,64 +64,25 @@ def main(page: ft.Page, nav=None):
     else:
         admin_header = None
 
-    # --- Filter Section ---
-    filter_all = ft.Container(
-        content=ft.Text("All", size=12, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
-        bgcolor=PRIMARY_BLUE,
-        padding=ft.padding.symmetric(horizontal=14, vertical=6),
-        border_radius=14,
-    )
-
-    filter_fully = ft.Text("Fully Relevant", size=13, color=TEXT_TERTIARY)
-    filter_partially = ft.Text("Partially Relevant", size=13, color=TEXT_TERTIARY)
-    filter_irrelevant = ft.Text("Irrelevant", size=13, color=TEXT_TERTIARY)
-
-    def on_export_csv(e):
-        print("Export CSV clicked")
-
-    # Export CSV green button matching submissions spec
-    export_btn = ft.Container(
-        content=ft.Row(
-            [
-                ft.Icon(ft.Icons.DOWNLOAD, size=16, color=TEXT_WHITE),
-                ft.Text("Export CSV", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=4,
-        ),
-        width=130,
-        height=40,
-        border_radius=20,
-        bgcolor="#22c55e",
-        alignment=ft.alignment.center,
-        on_click=on_export_csv,
-        ink=True,
-    )
-
-    filter_section = ft.Container(
-        content=ft.Row(
-            [
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.FILTER_LIST, size=20, color=TEXT_TERTIARY),
-                        ft.Container(width=8),
-                        filter_all,
-                        ft.Container(width=16),
-                        filter_fully,
-                        ft.Container(width=16),
-                        filter_partially,
-                        ft.Container(width=16),
-                        filter_irrelevant,
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.Container(expand=True),
-                export_btn,
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        ),
-        padding=ft.padding.symmetric(horizontal=24, vertical=12),
-    )
+    # --- Submissions data (mock — swap for a real service call when ready) ---
+    SUBMISSIONS_DATA = [
+        {"file": "juan_dela_cruz.pdf", "score": "88%", "classification": ["Fully Relevant"],
+         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:12"},
+        {"file": "maria_reyes.pdf", "score": "63%", "classification": ["Fully Relevant", "Partially Relevant"],
+         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:13"},
+        {"file": "pedro_garcia.pdf", "score": "41%", "classification": ["Irrelevant"],
+         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:14"},
+        {"file": "ana_torres.pdf", "score": "79%", "classification": ["Fully Relevant"],
+         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-23 14:05"},
+        {"file": "carlos_mendoza.pdf", "score": "55%", "classification": ["Partially Relevant"],
+         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-23 14:06"},
+        {"file": "sofia_lim.pdf", "score": "91%", "classification": ["Fully Relevant"],
+         "type": "Short Answer", "evaluator": "Prof. Lee", "date": "2025-06-22 11:30"},
+        {"file": "marco_santos.pdf", "score": "48%", "classification": ["Partially Relevant", "Irrelevant"],
+         "type": "Short Answer", "evaluator": "Prof. Lee", "date": "2025-06-22 11:31"},
+        {"file": "nina_cruz.pdf", "score": "82%", "classification": ["Fully Relevant"],
+         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-21 16:20"},
+    ]
 
     # --- Classification Badge Helpers ---
     def classification_badge(label):
@@ -168,30 +129,148 @@ def main(page: ft.Page, nav=None):
             )
         )
 
+    def build_row(item):
+        return ft.DataRow(
+            cells=[
+                file_cell(item["file"]),
+                ft.DataCell(ft.Text(item["score"], size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
+                classification_cell(item["classification"]),
+                ft.DataCell(ft.Text(item["type"], size=13, color=TEXT_SECONDARY)),
+                ft.DataCell(ft.Text(item["evaluator"], size=13, color=TEXT_SECONDARY)),
+                ft.DataCell(ft.Text(item["date"], size=13, color=TEXT_SECONDARY)),
+                override_cell(),
+            ],
+        )
+
+    def empty_row(msg="No submissions found"):
+        return [
+            ft.DataRow(cells=[
+                ft.DataCell(ft.Text(msg, color=TEXT_SECONDARY)),
+            ] + [ft.DataCell(ft.Text("")) for _ in range(6)])
+        ]
+
+    # --- Search + Classification Filter state ---
+    search_state = {"query": "", "classification": "all"}
+
+    def matches(item, query, classification):
+        if classification != "all" and classification not in item["classification"]:
+            return False
+        if query:
+            haystack = f"{item['file']} {item['evaluator']} {item['type']}".lower()
+            if query.lower() not in haystack:
+                return False
+        return True
+
+    def rebuild_rows(e=None):
+        style_filter_pills()
+        filtered = [item for item in SUBMISSIONS_DATA if matches(item, search_state["query"], search_state["classification"])]
+        submissions_table.rows = [build_row(item) for item in filtered] if filtered else empty_row()
+        page.update()
+
+    # --- Search bar (same styling as the Users page search bar) ---
+    search_bar = ft.TextField(
+        hint_text="Search student, evaluator, subject…",
+        prefix_icon=ft.Icons.SEARCH,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
+        bgcolor=INPUT_BG,
+        border_radius=8,
+        height=42,
+        text_size=13,
+        content_padding=ft.padding.symmetric(horizontal=14, vertical=8),
+        hint_style=ft.TextStyle(color=INPUT_HINT, size=13),
+        expand=True,
+        on_change=lambda e: (search_state.update({"query": e.control.value or ""}), rebuild_rows()),
+    )
+
+    # --- Classification filter pills ---
+    FILTERS = [("all", "All"), ("Fully Relevant", "Fully Relevant"),
+               ("Partially Relevant", "Partially Relevant"), ("Irrelevant", "Irrelevant")]
+
+    def make_filter_pill(key, label):
+        def on_click(e):
+            search_state["classification"] = key
+            rebuild_rows()
+
+        return ft.Container(
+            content=ft.Text(label, size=13, weight=ft.FontWeight.W_600),
+            padding=ft.padding.symmetric(horizontal=14, vertical=6),
+            border_radius=14,
+            ink=True,
+            on_click=on_click,
+        )
+
+    pills = {key: make_filter_pill(key, label) for key, label in FILTERS}
+
+    def style_filter_pills():
+        for key, pill in pills.items():
+            selected = search_state["classification"] == key
+            pill.bgcolor = PRIMARY_BLUE if selected else None
+            pill.content.color = TEXT_WHITE if selected else TEXT_TERTIARY
+
+    style_filter_pills()
+
+    def on_export_csv(e):
+        print("Export CSV clicked")
+
+    export_btn = ft.Container(
+        content=ft.Row(
+            [
+                ft.Icon(ft.Icons.DOWNLOAD, size=16, color=TEXT_WHITE),
+                ft.Text("Export CSV", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=4,
+        ),
+        width=130,
+        height=40,
+        border_radius=20,
+        bgcolor="#22c55e",
+        alignment=ft.alignment.center,
+        on_click=on_export_csv,
+        ink=True,
+    )
+
+    filter_pills_row = ft.Row(
+        [
+            ft.Icon(ft.Icons.FILTER_LIST, size=20, color=TEXT_TERTIARY),
+            ft.Container(width=4),
+            pills["all"],
+            ft.Container(width=4),
+            pills["Fully Relevant"],
+            ft.Container(width=4),
+            pills["Partially Relevant"],
+            ft.Container(width=4),
+            pills["Irrelevant"],
+        ],
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=0,
+    )
+
+    filter_section = ft.Container(
+        content=ft.Row(
+            [
+                search_bar,
+                ft.Container(width=16),
+                filter_pills_row,
+                ft.Container(width=16),
+                export_btn,
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        ),
+        padding=ft.padding.symmetric(horizontal=24, vertical=16),
+    )
+
     # --- Submissions Table ---
     submissions_table = ft.DataTable(
         columns=[
-            ft.DataColumn(
-                ft.Text("STUDENT FILE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("SCORE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("CLASSIFICATION", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("DATE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
-            ft.DataColumn(
-                ft.Text("ACTIONS", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY),
-            ),
+            ft.DataColumn(ft.Text("STUDENT FILE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("SCORE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("CLASSIFICATION", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("DATE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
+            ft.DataColumn(ft.Text("ACTIONS", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
         ],
         border=ft.border.all(1, BORDER_COLOR),
         border_radius=8,
@@ -201,96 +280,7 @@ def main(page: ft.Page, nav=None):
         heading_row_color=SECTION_BG_COLOR,
         data_row_min_height=56,
         show_bottom_border=True,
-        rows=[
-            ft.DataRow(
-                cells=[
-                    file_cell("juan_dela_cruz.pdf"),
-                    ft.DataCell(ft.Text("88%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Fully Relevant"),
-                    ft.DataCell(ft.Text("Essay", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Santos", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-24 09:12", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("maria_reyes.pdf"),
-                    ft.DataCell(ft.Text("63%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell(["Fully Relevant", "Partially Relevant"]),
-                    ft.DataCell(ft.Text("Essay", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Santos", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-24 09:13", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("pedro_garcia.pdf"),
-                    ft.DataCell(ft.Text("41%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Irrelevant"),
-                    ft.DataCell(ft.Text("Essay", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Santos", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-24 09:14", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("ana_torres.pdf"),
-                    ft.DataCell(ft.Text("79%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Fully Relevant"),
-                    ft.DataCell(ft.Text("Code Report", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Chen", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-23 14:05", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("carlos_mendoza.pdf"),
-                    ft.DataCell(ft.Text("55%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Partially Relevant"),
-                    ft.DataCell(ft.Text("Code Report", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Chen", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-23 14:06", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("sofia_lim.pdf"),
-                    ft.DataCell(ft.Text("91%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Fully Relevant"),
-                    ft.DataCell(ft.Text("Short Answer", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Lee", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-22 11:30", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("marco_santos.pdf"),
-                    ft.DataCell(ft.Text("48%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell(["Partially Relevant", "Irrelevant"]),
-                    ft.DataCell(ft.Text("Short Answer", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Lee", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-22 11:31", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-            ft.DataRow(
-                cells=[
-                    file_cell("nina_cruz.pdf"),
-                    ft.DataCell(ft.Text("82%", size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                    classification_cell("Fully Relevant"),
-                    ft.DataCell(ft.Text("Code Report", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("Prof. Chen", size=13, color=TEXT_SECONDARY)),
-                    ft.DataCell(ft.Text("2025-06-21 16:20", size=13, color=TEXT_SECONDARY)),
-                    override_cell(),
-                ],
-            ),
-        ],
+        rows=[build_row(item) for item in SUBMISSIONS_DATA],
     )
 
     # --- Submissions Card container ---

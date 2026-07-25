@@ -1,8 +1,11 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import flet as ft
+
+from screens.admin_user_card import build_user_cards
 from services.user_service import add_user
 from services.admin_user_service import (
     fetch_users_with_evaluations,
@@ -17,7 +20,7 @@ from utils.utils import (
     BORDER_COLOR, BORDER_COLOR_DARK,
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BUTTON_SECONDARY_BG, BUTTON_SECONDARY_TEXT, BUTTON_SECONDARY_BORDER,
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
-    SUCCESS, WARNING, ERROR
+    SUCCESS, WARNING, ERROR,
 )
 
 
@@ -26,10 +29,12 @@ def main(page: ft.Page, nav=None):
     page.scroll = ft.ScrollMode.AUTO
     page.bgcolor = BG_COLOR
 
-    # All user data now comes from the service layer — this screen only renders it.
-    users_data = fetch_users_with_evaluations()
+    try:
+        users_data = fetch_users_with_evaluations()
+    except Exception as ex:
+        print(f"Error loading admin users: {ex}")
+        users_data = []
 
-    # Only create header if not using admin navigation (navigation handles it)
     if not nav:
         shield_icon = ft.Container(
             content=ft.Icon(ft.Icons.SHIELD, size=20, color=TEXT_WHITE),
@@ -74,172 +79,50 @@ def main(page: ft.Page, nav=None):
     else:
         admin_header = None
 
-    # ── Table cell helpers ────────────────────────────────────────
-    def create_name_cell(avatar_text, full_name, is_active):
-        name_column_controls = [
-            ft.Text(full_name, size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
-        ]
-        if not is_active:
-            name_column_controls.append(
-                ft.Text("Account disabled", size=11, color=TEXT_TERTIARY)
-            )
-
-        return ft.DataCell(
-            ft.Row(
-                [
-                    ft.Container(
-                        content=ft.Text(
-                            avatar_text, size=11, weight=ft.FontWeight.BOLD,
-                            color=PRIMARY_BLUE if is_active else TEXT_TERTIARY,
-                        ),
-                        width=24,
-                        height=24,
-                        border_radius=12,
-                        bgcolor="#eff6ff" if is_active else SECTION_BG_COLOR,
-                        alignment=ft.alignment.center,
-                    ),
-                    ft.Container(width=8),
-                    ft.Column(name_column_controls, spacing=1),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            )
-        )
-
-    def create_role_badge(role):
-        if role == "Admin":
-            return ft.DataCell(
-                ft.Container(
-                    content=ft.Text("Admin", size=12, color="#7e22ce", weight=ft.FontWeight.W_600),
-                    bgcolor="#f3e8ff",
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
-                    border_radius=12,
-                )
-            )
-        else:
-            return ft.DataCell(
-                ft.Container(
-                    content=ft.Text("Evaluator", size=12, color=PRIMARY_BLUE, weight=ft.FontWeight.W_600),
-                    bgcolor="#eff6ff",
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
-                    border_radius=12,
-                )
-            )
-
-    # ── Users Table (reactive) ────────────────────────────────────
+    admin_gradient = ["#a855f7", "#7e22ce"]
+    evaluator_gradient = ["#3b82f6", "#2563eb"]
+    inactive_gradient = ["#9ca3af", "#6b7280"]
 
     def toggle_user_status(user, new_value, switch_control):
-        """Flip is_active on a user via the service layer; revert the switch on failure."""
-        success = set_user_active_status(user.get("id"), new_value)
-        if success:
-            user["is_active"] = new_value
-            rebuild_table()
-        else:
+        success = set_user_active_status(user["id"], new_value)
+
+        if not success:
+            # Revert the switch visually since the write failed
             switch_control.value = not new_value
             page.update()
+            print(f"Failed to update status for {user.get('email')}")
+            return
 
-    def _empty_row(msg="No users found"):
-        return [
-            ft.DataRow(cells=[
-                ft.DataCell(ft.Text(msg, color=TEXT_SECONDARY)),
-            ] + [ft.DataCell(ft.Text("")) for _ in range(6)])
-        ]
+        # Keep the in-memory list in sync so filters/pill counts are correct
+        user["is_active"] = new_value
+        rebuild_table()
 
-    def build_table_rows(users_list):
-        rows = []
-        for user in users_list:
-            name = user.get("name", "Unknown")
-            email = user.get("email", "")
-            role = user.get("role", "evaluator")
-            department = user.get("department", "N/A")
-            evaluations_count = user.get("evaluations_count", 0)
-            created_at = user.get("created_at", "")
-            is_active = user.get("is_active", True)
+    def format_created_at(created_at):
+        if not created_at:
+            return "N/A"
+        try:
+            from datetime import datetime
+            if isinstance(created_at, str):
+                return datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%Y-%m-%d')
+            return str(created_at)[:10]
+        except Exception:
+            return str(created_at)[:10]
 
-            if created_at:
-                try:
-                    from datetime import datetime
-                    if isinstance(created_at, str):
-                        created_date = datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                    else:
-                        created_date = str(created_at)[:10]
-                except Exception:
-                    created_date = str(created_at)[:10] if created_at else "N/A"
-            else:
-                created_date = "N/A"
+    empty_state = ft.Container(
+        content=ft.Text("No users found", size=13, color=TEXT_SECONDARY),
+        padding=ft.padding.all(24),
+        alignment=ft.alignment.center,
+    )
 
-            if name:
-                initials = "".join([word[0].upper() for word in name.split() if word])[:2]
-            else:
-                initials = "U"
-            if not initials:
-                initials = "U"
-
-            _user = user  # capture for closures below
-
-            status_switch = ft.Switch(
-                value=is_active,
-                active_color=SUCCESS,
-                scale=0.8,
-            )
-            status_switch.on_change = lambda e, u=_user, sw=status_switch: toggle_user_status(u, e.control.value, sw)
-
-            status_cell = ft.DataCell(
-                ft.Row(
-                    [
-                        status_switch,
-                        ft.Text(
-                            "Active" if is_active else "Inactive",
-                            size=12, weight=ft.FontWeight.W_600,
-                            color=SUCCESS if is_active else TEXT_SECONDARY,
-                        ),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=6,
-                )
-            )
-
-            rows.append(
-                ft.DataRow(
-                    color=SECTION_BG_COLOR if not is_active else None,
-                    cells=[
-                        create_name_cell(initials, name, is_active),
-                        ft.DataCell(ft.Text(email, size=13, color=TEXT_SECONDARY)),
-                        create_role_badge(role.capitalize()),
-                        ft.DataCell(ft.Text(department, size=13, color=TEXT_SECONDARY)),
-                        ft.DataCell(ft.Text(str(evaluations_count), size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY)),
-                        ft.DataCell(ft.Text(created_date, size=13, color=TEXT_SECONDARY)),
-                        status_cell,
-                    ],
-                )
-            )
-        return rows
-
-    users_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("NAME",        size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("EMAIL",       size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("ROLE",        size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("SUBJECT",     size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("EVALUATIONS", size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("JOINED",      size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-            ft.DataColumn(ft.Text("STATUS",      size=12, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY)),
-        ],
-        border=ft.border.all(1, BORDER_COLOR),
-        border_radius=8,
-        horizontal_lines=ft.border.BorderSide(1, BORDER_COLOR),
-        vertical_lines=None,
-        column_spacing=40,
-        heading_row_color=SECTION_BG_COLOR,
-        data_row_min_height=56,
-        show_bottom_border=True,
-        rows=build_table_rows(users_data) if users_data else _empty_row(),
+    users_grid = ft.Row(
+        controls=build_user_cards(page, users_data, toggle_user_status) if users_data else [empty_state],
+        wrap=True,
+        spacing=24,
+        run_spacing=20,
     )
 
     showing_text = ft.Text("", size=12, color=TEXT_TERTIARY)
 
-    # ------------------------------------------------------------------
-    # --- Add User Dialog (unchanged behavior, still uses services.user_service.add_user) ---
-    # ------------------------------------------------------------------
     def on_add_user(e):
         def styled_field(**kwargs):
             return ft.TextField(
@@ -253,58 +136,17 @@ def main(page: ft.Page, nav=None):
                 **kwargs,
             )
 
-        name_field = styled_field(
-            label="Full Name",
-            hint_text="Juan Dela Cruz",
-            prefix_icon=ft.Icons.PERSON_OUTLINE,
-        )
-
-        email_field = styled_field(
-            label="Email Address",
-            hint_text="juan@university.edu.ph",
-            prefix_icon=ft.Icons.MAIL_OUTLINE,
-            keyboard_type=ft.KeyboardType.EMAIL,
-        )
-
-        password_field = styled_field(
-            label="Password",
-            hint_text="Enter password (leave blank to auto-generate)",
-            prefix_icon=ft.Icons.LOCK_OUTLINE,
-            password=True,
-            can_reveal_password=True,
-        )
+        name_field = styled_field(label="Full Name", hint_text="Juan Dela Cruz", prefix_icon=ft.Icons.PERSON_OUTLINE)
+        email_field = styled_field(label="Email Address", hint_text="juan@university.edu.ph", prefix_icon=ft.Icons.MAIL_OUTLINE, keyboard_type=ft.KeyboardType.EMAIL)
+        password_field = styled_field(label="Password", hint_text="Enter password (leave blank to auto-generate)", prefix_icon=ft.Icons.LOCK_OUTLINE, password=True, can_reveal_password=True)
 
         password_strength_text = ft.Text("", size=11, color=TEXT_SECONDARY)
         password_requirements = ft.Column(
             [
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False),
-                        ft.Container(width=6),
-                        ft.Text("At least 8 characters", size=11, color=TEXT_TERTIARY),
-                    ],
-                ),
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False),
-                        ft.Container(width=6),
-                        ft.Text("At least 1 uppercase letter", size=11, color=TEXT_TERTIARY),
-                    ],
-                ),
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False),
-                        ft.Container(width=6),
-                        ft.Text("At least 1 number", size=11, color=TEXT_TERTIARY),
-                    ],
-                ),
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False),
-                        ft.Container(width=6),
-                        ft.Text("At least 1 special character", size=11, color=TEXT_TERTIARY),
-                    ],
-                ),
+                ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False), ft.Container(width=6), ft.Text("At least 8 characters", size=11, color=TEXT_TERTIARY)]),
+                ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False), ft.Container(width=6), ft.Text("At least 1 uppercase letter", size=11, color=TEXT_TERTIARY)]),
+                ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False), ft.Container(width=6), ft.Text("At least 1 number", size=11, color=TEXT_TERTIARY)]),
+                ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, size=12, color=SUCCESS, visible=False), ft.Container(width=6), ft.Text("At least 1 special character", size=11, color=TEXT_TERTIARY)]),
             ],
             spacing=4,
         )
@@ -323,13 +165,11 @@ def main(page: ft.Page, nav=None):
                 len(password) >= 8,
                 any(c.isupper() for c in password),
                 any(c.isdigit() for c in password),
-                any(c in '!@#$%^&*(),.?":{}|<>' for c in password)
+                any(c in '!@#$%^&*(),.?":{}|<>' for c in password),
             ]
 
-            all_passed = all(checks)
             passed_count = sum(checks)
-
-            if all_passed:
+            if all(checks):
                 password_strength_text.value = "Strong password"
                 password_strength_text.color = SUCCESS
             elif passed_count >= 2:
@@ -342,9 +182,9 @@ def main(page: ft.Page, nav=None):
                 password_strength_text.value = "Too weak"
                 password_strength_text.color = ERROR
 
-            for i, row in enumerate(password_requirements.controls):
-                row.controls[0].visible = checks[i]
-                row.controls[2].color = TEXT_PRIMARY if checks[i] else TEXT_TERTIARY
+            for index, row in enumerate(password_requirements.controls):
+                row.controls[0].visible = checks[index]
+                row.controls[2].color = TEXT_PRIMARY if checks[index] else TEXT_TERTIARY
 
             dialog.update()
 
@@ -365,26 +205,9 @@ def main(page: ft.Page, nav=None):
             expand=True,
         )
 
-        department_field = styled_field(
-            label="Department / Subject",
-            hint_text="Computer Science",
-            prefix_icon=ft.Icons.SCHOOL_OUTLINED,
-            expand=True,
-        )
-
-        institution_field = styled_field(
-            label="Institution",
-            hint_text="e.g. Camarines Sur Polytechnic Colleges",
-            prefix_icon=ft.Icons.APARTMENT_OUTLINED,
-        )
-
-        code_field = styled_field(
-            label="6-Digit Access Code",
-            hint_text="Will be generated on user creation",
-            prefix_icon=ft.Icons.VPN_KEY_OUTLINED,
-            read_only=True,
-            value="",
-        )
+        department_field = styled_field(label="Department / Subject", hint_text="Computer Science", prefix_icon=ft.Icons.SCHOOL_OUTLINED, expand=True)
+        institution_field = styled_field(label="Institution", hint_text="e.g. Camarines Sur Polytechnic Colleges", prefix_icon=ft.Icons.APARTMENT_OUTLINED)
+        code_field = styled_field(label="6-Digit Access Code", hint_text="Will be generated on user creation", prefix_icon=ft.Icons.VPN_KEY_OUTLINED, read_only=True, value="")
 
         form_error_banner = ft.Container(
             content=ft.Row(
@@ -445,7 +268,7 @@ def main(page: ft.Page, nav=None):
             if not email:
                 email_field.error_text = "Email is required"
                 has_error = True
-            elif "@" not in email or "." not in email.split("@")[-1]:
+            elif "@" not in email or "." not in (email.split("@")[-1] if isinstance(email, str) else ""):
                 email_field.error_text = "Enter a valid email address"
                 has_error = True
             if password and len(password) < 8:
@@ -483,8 +306,10 @@ def main(page: ft.Page, nav=None):
                 )
                 page.snack_bar.open = True
                 page.update()
-                page.clean()
-                main(page, nav)
+                if nav:
+                    nav.navigate_to_users()
+                else:
+                    main(page, nav)
             else:
                 show_form_error(result.get('message', 'Failed to add user. Please try again.'))
 
@@ -555,7 +380,6 @@ def main(page: ft.Page, nav=None):
                 ft.Container(height=20),
                 form_error_banner,
                 ft.Container(height=8),
-
                 ft.Text("ACCOUNT DETAILS", **section_label_style),
                 ft.Container(height=10),
                 name_field,
@@ -567,25 +391,18 @@ def main(page: ft.Page, nav=None):
                 password_strength_text,
                 ft.Container(height=8),
                 password_requirements,
-
                 ft.Container(height=20),
                 ft.Divider(height=1, color=BORDER_COLOR),
                 ft.Container(height=20),
-
                 ft.Text("ROLE & AFFILIATION", **section_label_style),
                 ft.Container(height=10),
-                ft.Row(
-                    [role_dropdown, ft.Container(width=12), department_field],
-                ),
+                ft.Row([role_dropdown, ft.Container(width=12), department_field]),
                 ft.Container(height=12),
                 institution_field,
                 ft.Container(height=12),
                 code_field,
-
                 ft.Container(height=24),
-                ft.Row(
-                    [ft.Container(expand=True), cancel_btn, ft.Container(width=10), add_btn],
-                ),
+                ft.Row([ft.Container(expand=True), cancel_btn, ft.Container(width=10), add_btn]),
             ],
             tight=True,
             spacing=0,
@@ -622,7 +439,6 @@ def main(page: ft.Page, nav=None):
         on_click=on_add_user,
     )
 
-    # ── Search + status filter pills + reactive rebuild ───────────
     search_state = {"query": "", "status": "all"}
 
     def make_pill(label_prefix, status_key):
@@ -659,7 +475,13 @@ def main(page: ft.Page, nav=None):
     def rebuild_table(e=None):
         style_pills()
         filtered = filter_users(users_data, search_state["query"], search_state["status"])
-        users_table.rows = build_table_rows(filtered) if filtered else _empty_row("No matching users")
+        users_grid.controls = build_user_cards(page, filtered, toggle_user_status) if filtered else [
+            ft.Container(
+                content=ft.Text("No matching users", size=13, color=TEXT_SECONDARY),
+                padding=ft.padding.all(24),
+                alignment=ft.alignment.center,
+            )
+        ]
         showing_text.value = f"Showing {len(filtered)} of {len(users_data)} users"
         page.update()
 
@@ -678,7 +500,6 @@ def main(page: ft.Page, nav=None):
         on_change=lambda e: (search_state.update({"query": e.control.value or ""}), rebuild_table()),
     )
 
-    # --- Users Section Header ---
     users_header = ft.Row(
         [
             search_bar,
@@ -690,16 +511,12 @@ def main(page: ft.Page, nav=None):
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
 
-    # --- Users Section ---
     users_section = ft.Container(
         content=ft.Column(
             [
                 users_header,
                 ft.Container(height=16),
-                ft.Container(
-                    content=users_table,
-                    padding=ft.padding.all(0),
-                ),
+                ft.Container(content=users_grid, padding=ft.padding.all(0)),
                 ft.Container(height=12),
                 ft.Row([ft.Container(expand=True), showing_text]),
             ],
@@ -711,40 +528,19 @@ def main(page: ft.Page, nav=None):
         border=ft.border.all(1, BORDER_COLOR),
     )
 
-    # Initial footer text
     showing_text.value = f"Showing {len(users_data)} of {len(users_data)} users"
 
-    # --- Main Content ---
-    if admin_header:
-        main_content = ft.Container(
-            content=ft.Column(
-                [
-                    admin_header,
-                    ft.Container(height=8),
-                    ft.Container(
-                        content=users_section,
-                        padding=ft.padding.symmetric(horizontal=32),
-                    ),
-                    ft.Container(height=40),
-                ],
-                spacing=0,
-            ),
-        )
-    else:
-        main_content = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=users_section,
-                        padding=ft.padding.symmetric(horizontal=32),
-                    ),
-                    ft.Container(height=40),
-                ],
-                spacing=0,
-            ),
-        )
+    main_content = ft.Container(
+        content=ft.Column(
+            [
+                *( [admin_header, ft.Container(height=8)] if admin_header else [] ),
+                ft.Container(content=users_section, padding=ft.padding.symmetric(horizontal=32)),
+                ft.Container(height=40),
+            ],
+            spacing=0,
+        ),
+    )
 
-    # --- Page Layout ---
     if nav:
         nav.main_content = main_content
     else:
