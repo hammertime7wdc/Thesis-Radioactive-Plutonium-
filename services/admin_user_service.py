@@ -5,7 +5,7 @@ All Supabase reads/writes related to user profiles live here so the
 screen module only has to deal with rendering and user interaction.
 """
 
-from services.supabase_client import get_supabase_client
+from services.supabase_client import get_supabase_client, get_supabase_service_client
 
 
 def fetch_users_with_evaluations() -> list[dict]:
@@ -46,9 +46,28 @@ def fetch_users_with_evaluations() -> list[dict]:
 
 
 def set_user_active_status(user_id: str, is_active: bool) -> bool:
-    """Placeholder for user status toggle - not implemented yet"""
-    print(f"Placeholder: Would toggle user {user_id} to {'active' if is_active else 'inactive'}")
-    return True
+    """Toggle a user's active status.
+
+    Uses the service-role client since this is an admin-privileged action
+    that must bypass per-user RLS (the acting admin's auth.uid() will not
+    match the target user's id, so the regular client would silently
+    update zero rows under the "Users can update own profile" policy).
+    """
+    try:
+        supabase_admin = get_supabase_service_client()
+        result = (
+            supabase_admin.table("profiles")
+            .update({"is_active": is_active})
+            .eq("id", user_id)
+            .execute()
+        )
+        if not result.data:
+            print(f"Warning: no profile row updated for user {user_id}")
+            return False
+        return True
+    except Exception as e:
+        print(f"Error updating user status for {user_id}: {e}")
+        return False
 
 
 def filter_users(users_list: list[dict], query: str = "", status_filter: str = "all") -> list[dict]:

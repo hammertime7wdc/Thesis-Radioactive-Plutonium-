@@ -36,7 +36,26 @@ def load_session():
             access_token=session_data["access_token"],
             refresh_token=session_data["refresh_token"]
         )
-        
+
+        # Re-check is_active on every restore, not just at login time,
+        # so a user banned mid-session is booted out on next launch
+        profile_response = (
+            supabase.table("profiles")
+            .select("is_active")
+            .eq("id", session_data["user_id"])
+            .single()
+            .execute()
+        )
+        is_active = profile_response.data.get("is_active", True) if profile_response.data else True
+
+        if not is_active:
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+            clear_session()
+            return None
+
         return session_data
     except Exception as e:
         print(f"Error loading session: {e}")
