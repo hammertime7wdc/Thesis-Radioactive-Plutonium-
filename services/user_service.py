@@ -2,10 +2,12 @@ from supabase import Client
 from services.supabase_client import get_supabase_client, get_supabase_service_client
 from services.audit_service import log_audit_entry
 from services.session_manager import get_current_user
+from services.email_service import get_email_service
 import uuid
 import secrets
 import random
 import string
+from datetime import datetime, timedelta
 
 
 def generate_secure_password(length: int = 12) -> str:
@@ -37,7 +39,7 @@ def generate_secure_password(length: int = 12) -> str:
     return password
 
 
-def add_user(email: str, role: str = 'evaluator', name: str = None, department: str = None, institution: str = None, password: str = None) -> dict:
+def add_user(email: str, role: str = 'evaluator', name: str = None, department: str = None, institution: str = None, password: str = None, access_code: str = None) -> dict:
     """
     Add a new user to the system.
     
@@ -47,6 +49,8 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
         name: User's full name
         department: User's department
         institution: User's institution
+        password: Optional password (auto-generated if not provided)
+        access_code: 6-digit access code for the user
     
     Returns:
         Dictionary with success status and message
@@ -66,6 +70,9 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
         else:
             temp_password = generate_secure_password(12)
         
+        # Set access code expiration (30 minutes from now)
+        access_code_expires_at = datetime.now() + timedelta(minutes=30)
+        
         # Create user in Supabase Auth using admin API
         auth_response = supabase.auth.admin.create_user({
             'email': email,
@@ -84,7 +91,9 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
                 'role': role,
                 'name': name,
                 'department': department,
-                'institution': institution
+                'institution': institution,
+                'access_code': access_code,
+                'access_code_expires_at': access_code_expires_at.isoformat()
             }
             # Remove None values
             user_data = {k: v for k, v in user_data.items() if v is not None}
@@ -97,7 +106,9 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
                 'role': role,
                 'name': name,
                 'department': department,
-                'institution': institution
+                'institution': institution,
+                'access_code': access_code,
+                'access_code_expires_at': access_code_expires_at.isoformat()
             }
             # Remove None values
             user_data = {k: v for k, v in user_data.items() if v is not None}
@@ -120,6 +131,24 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
                 'institution': institution
             }
         )
+        
+        # Send welcome email with credentials
+        try:
+            email_service = get_email_service()
+            user_display_name = name if name else email.split('@')[0]
+            login_url = "http://localhost:8000"  # Adjust as needed
+            
+            email_service.send_welcome_email(
+                to_email=email,
+                user_name=user_display_name,
+                temporary_password=temp_password,
+                login_url=login_url,
+                access_code=access_code
+            )
+            print(f"Welcome email sent to {email}")
+        except Exception as email_error:
+            print(f"Failed to send welcome email: {email_error}")
+            # Continue even if email fails - user is still created
         
         return {
             'success': True, 
