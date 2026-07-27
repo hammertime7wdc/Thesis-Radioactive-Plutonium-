@@ -1,17 +1,13 @@
 import sys
 import os
-import base64
-import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import flet as ft
-from services.supabase_client import get_supabase_client
+from services.supabase_client import get_supabase_client, verify_user_password
 from services.session_manager import get_current_user, clear_session
 from services.activity_logger import log_activity, get_recent_activities
-import cloudinary
-import cloudinary.uploader
-from dotenv import load_dotenv
+from services.avatar_service import upload_avatar_image
 
 try:
     from database.auth import send_password_reset_email, reset_password_with_token
@@ -20,23 +16,6 @@ except ModuleNotFoundError:
         return False, "Database not available"
     def reset_password_with_token(token: str, new_password: str):
         return False, "Database not available"
-
-load_dotenv()
-
-# Configure Cloudinary
-cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
-api_key = os.getenv("CLOUDINARY_API_KEY")
-api_secret = os.getenv("CLOUDINARY_API_SECRET")
-
-if not all([cloud_name, api_key, api_secret]):
-    print("WARNING: Cloudinary credentials not found in .env file")
-    print("Required: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET")
-
-cloudinary.config(
-    cloud_name=cloud_name,
-    api_key=api_key,
-    api_secret=api_secret
-)
 
 from utils.utils import (
     BG_COLOR,
@@ -334,63 +313,41 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         picker.pick_files(allowed_extensions=["jpg", "jpeg", "png", "gif", "webp"])
 
     def upload_avatar(file_path):
-        
         try:
-            # Check if Cloudinary is configured
-            if not all([cloud_name, api_key, api_secret]):
-                upload_progress.visible = False
-                upload_message.value = "Cloudinary not configured. Check .env file."
-                upload_message.color = ft.Colors.RED_500
-                upload_message.visible = True
-                page.update()
-                return
-            
             upload_progress.visible = True
             upload_message.value = "Uploading..."
             upload_message.visible = True
             page.update()
-            
-            # Upload to Cloudinary
-            upload_result = cloudinary.uploader.upload(
-                file_path,
-                folder="avatars",
-                public_id=f"{user_id}_{uuid.uuid4().hex}",
-                overwrite=True,
-                resource_type="image",
-                transformation=[
-                    {"width": 200, "height": 200, "crop": "fill", "gravity": "face"}
-                ]
-            )
-            
-            avatar_url = upload_result.get("secure_url")
-            if avatar_url:
-                state["display_avatar_url"] = avatar_url
-                avatar_image.src = avatar_url
-                avatar_image.visible = True
-                
-                upload_progress.visible = False
-                upload_message.value = "Avatar uploaded successfully!"
-                upload_message.color = SUCCESS
-                
-                log_activity(user_id, "avatar_upload", "Updated profile avatar")
-                refresh_recent_activity()
 
-                # Re-render profile view to update avatar display
-                render_content()
-                page.update()
-            else:
-                raise Exception("No URL returned from Cloudinary")
-            
+            avatar_url = upload_avatar_image(file_path, user_id)
+
+            state["display_avatar_url"] = avatar_url
+            avatar_image.src = avatar_url
+            avatar_image.visible = True
+
+            upload_progress.visible = False
+            upload_message.value = "Avatar uploaded successfully!"
+            upload_message.color = SUCCESS
+
+            log_activity(user_id, "avatar_upload", "Updated profile avatar")
+            refresh_recent_activity()
+
+            # Re-render profile view to update avatar display
+            render_content()
+            page.update()
+
         except Exception as ex:
             upload_progress.visible = False
             error_msg = str(ex)
-            print(f"Cloudinary upload error: {error_msg}")
-            
+            print(f"Avatar upload error: {error_msg}")
+
             if "invalid signature" in error_msg.lower() or "authentication" in error_msg.lower():
                 upload_message.value = "Invalid Cloudinary credentials. Check .env file."
+            elif "not configured" in error_msg.lower():
+                upload_message.value = error_msg
             else:
                 upload_message.value = f"Upload failed: {error_msg}"
-            
+
             upload_message.color = ft.Colors.RED_500
             page.update()
 
@@ -420,13 +377,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             page.update()
             return
 
-        try:
-            supabase = get_supabase_client()
-            supabase.auth.sign_in_with_password({
-                "email": user_email,
-                "password": current_password.value,
-            })
-        except Exception:
+        if not verify_user_password(user_email, current_password.value):
             security_message.value = "Current password is incorrect."
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
@@ -745,7 +696,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 [
                     ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                     ft.Container(height=10),
-                    ft.Text("We’ll send a reset code to your email, then you can choose a new password.", size=12, color=TEXT_SECONDARY),
+                    ft.Text("We'll send a reset code to your email, then you can choose a new password.", size=12, color=TEXT_SECONDARY),
                     ft.Container(height=16),
                     ft.Text("Email Address", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
                     ft.Container(height=4),
