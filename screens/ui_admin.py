@@ -10,6 +10,7 @@ from services.user_service import add_user
 from services.admin_user_service import (
     fetch_users_with_evaluations,
     set_user_active_status,
+    delete_user,
     filter_users,
     count_by_status,
 )
@@ -97,6 +98,28 @@ def main(page: ft.Page, nav=None):
         user["is_active"] = new_value
         rebuild_table()
 
+    def handle_delete_user(user):
+        success, message = delete_user(user["id"])
+
+        if not success:
+            page.snack_bar = ft.SnackBar(
+                ft.Text(message or "Failed to delete user.", color=TEXT_WHITE),
+                bgcolor=ERROR,
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
+
+        # Remove from the in-memory list so the grid and pill counts update
+        users_data[:] = [u for u in users_data if u["id"] != user["id"]]
+
+        page.snack_bar = ft.SnackBar(
+            ft.Text(f"{user.get('email', 'User')} was deleted.", color=TEXT_WHITE),
+            bgcolor=SUCCESS,
+        )
+        page.snack_bar.open = True
+        rebuild_table()
+
     def format_created_at(created_at):
         if not created_at:
             return "N/A"
@@ -115,7 +138,7 @@ def main(page: ft.Page, nav=None):
     )
 
     users_grid = ft.Row(
-        controls=build_user_cards(page, users_data, toggle_user_status) if users_data else [empty_state],
+        controls=build_user_cards(page, users_data, toggle_user_status, handle_delete_user) if users_data else [empty_state],
         wrap=True,
         spacing=24,
         run_spacing=20,
@@ -475,7 +498,7 @@ def main(page: ft.Page, nav=None):
     def rebuild_table(e=None):
         style_pills()
         filtered = filter_users(users_data, search_state["query"], search_state["status"])
-        users_grid.controls = build_user_cards(page, filtered, toggle_user_status) if filtered else [
+        users_grid.controls = build_user_cards(page, filtered, toggle_user_status, handle_delete_user) if filtered else [
             ft.Container(
                 content=ft.Text("No matching users", size=13, color=TEXT_SECONDARY),
                 padding=ft.padding.all(24),

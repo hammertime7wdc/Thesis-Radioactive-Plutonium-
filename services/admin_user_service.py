@@ -48,6 +48,9 @@ def fetch_users_with_evaluations() -> list[dict]:
 def set_user_active_status(user_id: str, is_active: bool) -> bool:
     """Toggle a user's active status.
 
+    Updates profiles.is_active - used by this app's own UI/filtering and
+    by the login/session checks in auth.py and session_manager.py.
+
     Uses the service-role client since this is an admin-privileged action
     that must bypass per-user RLS (the acting admin's auth.uid() will not
     match the target user's id, so the regular client would silently
@@ -55,6 +58,7 @@ def set_user_active_status(user_id: str, is_active: bool) -> bool:
     """
     try:
         supabase_admin = get_supabase_service_client()
+
         result = (
             supabase_admin.table("profiles")
             .update({"is_active": is_active})
@@ -64,10 +68,49 @@ def set_user_active_status(user_id: str, is_active: bool) -> bool:
         if not result.data:
             print(f"Warning: no profile row updated for user {user_id}")
             return False
+
         return True
     except Exception as e:
         print(f"Error updating user status for {user_id}: {e}")
         return False
+
+
+def delete_user(user_id: str) -> tuple[bool, str]:
+    """Delete a user, but only if they have zero evaluations on record.
+
+    Returns (success, message). message is an error explanation on
+    failure, or empty string on success.
+
+    Deletes via the Auth admin API (auth.admin.delete_user), which cascades
+    to remove the profiles row and, in turn, rubrics (per the FK ON DELETE
+    CASCADE chain in the schema). We check evaluations manually first and
+    refuse to proceed if any exist, rather than letting a cascade silently
+    wipe evaluation history - a user with evaluation history should be
+    deactivated (is_active=False) instead of deleted.
+    """
+    try:
+        supabase_admin = get_supabase_service_client()
+
+        eval_response = (
+            supabase_admin.table("evaluations")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        eval_count = eval_response.count if eval_response.count else 0
+
+        if eval_count > 0:
+            return False, (
+                f"Cannot delete: this user has {eval_count} evaluation"
+                f"{'s' if eval_count != 1 else ''} on record. "
+                "Disable the account instead."
+            )
+
+        supabase_admin.auth.admin.delete_user(user_id)
+        return True, ""
+    except Exception as e:
+        print(f"Error deleting user {user_id}: {e}")
+        return False, str(e)
 
 
 def filter_users(users_list: list[dict], query: str = "", status_filter: str = "all") -> list[dict]:

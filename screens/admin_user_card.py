@@ -72,7 +72,7 @@ def _make_stat_box(label, value):
     )
 
 
-def build_user_card(page: ft.Page, user: dict, on_toggle_status):
+def build_user_card(page: ft.Page, user: dict, on_toggle_status, on_delete_user=None):
     name = user.get("name") or "Unknown"
     email = user.get("email") or ""
     role = (user.get("role") or "evaluator").lower()
@@ -149,6 +149,13 @@ def build_user_card(page: ft.Page, user: dict, on_toggle_status):
         if not avatar_url:
             return
 
+        def close_dialog(ev):
+            if hasattr(page, "close"):
+                page.close(preview_dialog)
+            else:
+                preview_dialog.open = False
+                page.update()
+
         preview_dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text(name, color=TEXT_PRIMARY),
@@ -172,9 +179,15 @@ def build_user_card(page: ft.Page, user: dict, on_toggle_status):
                 height=440,
                 alignment=ft.alignment.center,
             ),
-            actions=[ft.TextButton("Close", on_click=lambda ev: page.close(preview_dialog))],
+            actions=[ft.TextButton("Close", on_click=close_dialog)],
         )
-        page.open(preview_dialog)
+
+        if hasattr(page, "open"):
+            page.open(preview_dialog)
+        else:
+            page.dialog = preview_dialog
+            preview_dialog.open = True
+            page.update()
 
     avatar.on_click = open_avatar_preview
 
@@ -256,6 +269,107 @@ def build_user_card(page: ft.Page, user: dict, on_toggle_status):
     )
     status_switch.on_change = lambda e, u=user, sw=status_switch: on_toggle_status(u, e.control.value, sw)
 
+    # ── Delete UI Interactive State Toggling ─────────────────────────
+    def show_confirm_delete(e):
+        delete_btn_view.visible = False
+        confirm_delete_view.visible = True
+        page.update()
+
+    def hide_confirm_delete(e):
+        delete_btn_view.visible = True
+        confirm_delete_view.visible = False
+        page.update()
+
+    def handle_delete(e):
+        if on_delete_user:
+            on_delete_user(user)
+        else:
+            print(f"Placeholder: User {user.get('email', 'Unknown')} deleted.")
+        hide_confirm_delete(e)
+
+    # State 1: Default "Delete User" button
+    delete_btn_view = ft.Container(
+        content=ft.TextButton(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.DELETE_OUTLINE, size=16, color="#DC2626"),
+                    ft.Text("Delete User", size=13, weight=ft.FontWeight.W_600, color="#DC2626"),
+                ],
+                tight=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=6,
+            ),
+            on_click=show_confirm_delete,
+            style=ft.ButtonStyle(
+                padding=ft.padding.symmetric(horizontal=12, vertical=6),
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+        ),
+        alignment=ft.alignment.center,
+        padding=ft.padding.only(top=12),
+        visible=True,
+    )
+
+    # State 2: Red Confirmation Card
+    confirm_delete_view = ft.Container(
+        content=ft.Row(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.ERROR_OUTLINE, size=18, color="#DC2626"),
+                        ft.Text(
+                            "Remove this\nuser?",
+                            size=12,
+                            weight=ft.FontWeight.W_500,
+                            color="#DC2626",
+                        ),
+                    ],
+                    tight=True,
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Row(
+                    [
+                        ft.ElevatedButton(
+                            content=ft.Text("Yes, delete", color="#FFFFFF", size=12),
+                            style=ft.ButtonStyle(
+                                bgcolor="#DC2626",
+                                elevation=0,
+                                padding=ft.padding.symmetric(horizontal=10, vertical=0),
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                            ),
+                            height=32,
+                            on_click=handle_delete,
+                        ),
+                        ft.OutlinedButton(
+                            content=ft.Text("Cancel", color="#374151", size=12),
+                            style=ft.ButtonStyle(
+                                padding=ft.padding.symmetric(horizontal=10, vertical=0),
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                                side=ft.BorderSide(1, "#E5E7EB"),
+                            ),
+                            height=32,
+                            on_click=hide_confirm_delete,
+                        ),
+                    ],
+                    tight=True,
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor="#FEF2F2",
+        border=ft.border.all(1, "#FECACA"),
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=10, vertical=10),
+        margin=ft.margin.only(top=8),
+        visible=False,
+    )
+
+    delete_area = ft.Column([delete_btn_view, confirm_delete_view], spacing=0)
+
     body = ft.Container(
         content=ft.Column(
             [
@@ -299,6 +413,7 @@ def build_user_card(page: ft.Page, user: dict, on_toggle_status):
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
+                delete_area,
             ],
             spacing=0,
         ),
@@ -321,13 +436,13 @@ def build_user_card(page: ft.Page, user: dict, on_toggle_status):
     )
 
 
-def build_user_cards(page: ft.Page, users: list[dict], on_toggle_status):
+def build_user_cards(page: ft.Page, users: list[dict], on_toggle_status, on_delete_user=None):
     cards = []
     for user in users:
         try:
-            cards.append(build_user_card(page, user, on_toggle_status))
+            cards.append(build_user_card(page, user, on_toggle_status, on_delete_user))
         except Exception as ex:
-            print(f"Error building admin card for {user.get('email', 'unknown')}: {ex}")
+            print(f"Error building card for {user.get('email', 'unknown')}: {ex}")
     return cards
 
 
@@ -364,7 +479,7 @@ def build_user_management_header(
                 weight=ft.FontWeight.W_600 if is_selected else ft.FontWeight.W_500,
                 color="#FFFFFF" if is_selected else "#64748B",
             ),
-            bgcolor="#2563EB" if is_selected else ft.Colors.TRANSPARENT,
+            bgcolor="#2563EB" if is_selected else "transparent",
             padding=ft.padding.symmetric(horizontal=14, vertical=8),
             border_radius=20,
             ink=True,
@@ -408,7 +523,13 @@ def build_user_management_header(
     )
 
 
-def build_user_management_view(page: ft.Page, users: list[dict], on_toggle_status, on_add_user):
+def build_user_management_view(
+    page: ft.Page,
+    users: list[dict],
+    on_toggle_status,
+    on_add_user,
+    on_delete_user=None,
+):
     total_count = len(users)
     active_count = sum(1 for u in users if u.get("is_active", True))
     inactive_count = total_count - active_count
@@ -421,7 +542,7 @@ def build_user_management_view(page: ft.Page, users: list[dict], on_toggle_statu
         on_add_user=on_add_user,
     )
 
-    user_cards = build_user_cards(page, users, on_toggle_status)
+    user_cards = build_user_cards(page, users, on_toggle_status, on_delete_user)
 
     cards_grid = ft.Row(
         controls=user_cards,
