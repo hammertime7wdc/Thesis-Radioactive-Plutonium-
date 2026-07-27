@@ -6,25 +6,26 @@ load_dotenv()
 
 _supabase_client: Client = None
 
+
 def get_supabase_client() -> Client:
     """
     Get or create the Supabase client singleton.
     Initialize with SUPABASE_URL and SUPABASE_ANON_KEY from environment variables.
     """
     global _supabase_client
-    
+
     if _supabase_client is None:
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
-        
+
         if not supabase_url or not supabase_anon_key:
             raise ValueError(
                 "SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables. "
                 "Please check your .env file."
             )
-        
+
         _supabase_client = create_client(supabase_url, supabase_anon_key)
-    
+
     return _supabase_client
 
 
@@ -35,10 +36,43 @@ def get_supabase_service_client() -> Client:
     """
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    
+
     if not supabase_url or not supabase_service_key:
         raise ValueError(
             "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables."
         )
-    
+
     return create_client(supabase_url, supabase_service_key)
+
+
+def verify_user_password(email: str, password: str) -> bool:
+    """
+    Check that (email, password) is a valid credential pair WITHOUT touching
+    the app's active session.
+
+    Re-authenticating on the shared singleton client (get_supabase_client())
+    would silently replace the app's live session with a new one, while the
+    locally persisted .session.json keeps the old tokens - if Supabase
+    rotates refresh tokens, that stale local session can then start failing
+    later for no obvious reason. This uses a standalone, throwaway client
+    instead, so the real session is left completely alone.
+    """
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+
+    if not supabase_url or not supabase_anon_key:
+        raise ValueError(
+            "SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables."
+        )
+
+    temp_client = create_client(supabase_url, supabase_anon_key)
+    try:
+        temp_client.auth.sign_in_with_password({"email": email, "password": password})
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            temp_client.auth.sign_out()
+        except Exception:
+            pass
