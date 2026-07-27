@@ -89,9 +89,9 @@ class EmailService:
         
         Args:
             to_email: Recipient email address
-            reset_link: Password reset link
+            reset_link: Unused - kept for backward compatibility with callers
             user_name: Optional user name for personalization
-            reset_code: Optional 6-digit reset code
+            reset_code: 6-digit reset code
         
         Returns:
             bool: True if email sent successfully
@@ -104,7 +104,7 @@ class EmailService:
         code_section = ""
         if reset_code:
             code_section = f"""
-                    <p>Or use this 6-digit reset code in the application:</p>
+                    <p>Use this 6-digit reset code in the application:</p>
                     <div class="password-box">{reset_code}</div>
             """
         
@@ -116,15 +116,6 @@ class EmailService:
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
                 .header {{ background-color: #1e3a8a; color: white; padding: 20px; text-align: center; }}
                 .content {{ background-color: #f9fafb; padding: 30px; border-radius: 8px; }}
-                .button {{ 
-                    display: inline-block; 
-                    padding: 12px 24px; 
-                    background-color: #1e3a8a; 
-                    color: white; 
-                    text-decoration: none; 
-                    border-radius: 6px;
-                    margin: 20px 0;
-                }}
                 .password-box {{ 
                     background-color: #e5e7eb; 
                     padding: 15px; 
@@ -145,18 +136,12 @@ class EmailService:
                 <div class="content">
                     <p>{greeting}</p>
                     <p>We received a request to reset your password for your QualCheck account.</p>
-                    <p>Click the button below to reset your password:</p>
-                    <center>
-                        <a href="{reset_link}" class="button">Reset Password</a>
-                    </center>
                     {code_section}
-                    <p>Or copy and paste this link into your browser:</p>
-                    <p style="word-break: break-all; color: #1e3a8a;">{reset_link}</p>
-                    <p><strong>This link expires in 1 hour.</strong></p>
+                    <p><strong>This code expires in 1 hour.</strong></p>
                     <p>If you didn't request this password reset, please ignore this email.</p>
                 </div>
                 <div class="footer">
-                    <p>&copy; 2024 QualCheck. All rights reserved.</p>
+                    <p>&copy; 2026 QualCheck. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -173,15 +158,13 @@ class EmailService:
             to_email: Recipient email address
             user_name: User's name
             temporary_password: Temporary password for first login
-            login_url: Optional login URL
+            login_url: Unused - kept for backward compatibility with callers
             access_code: 6-digit access code for the user
         
         Returns:
             bool: True if email sent successfully
         """
         subject = "Welcome to QualCheck - Your Account is Ready"
-        
-        login_link = login_url if login_url else "http://localhost:8000"
         
         # Build credentials section
         credentials_section = f"""
@@ -204,15 +187,6 @@ class EmailService:
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
                 .header {{ background-color: #1e3a8a; color: white; padding: 20px; text-align: center; }}
                 .content {{ background-color: #f9fafb; padding: 30px; border-radius: 8px; }}
-                .button {{ 
-                    display: inline-block; 
-                    padding: 12px 24px; 
-                    background-color: #1e3a8a; 
-                    color: white; 
-                    text-decoration: none; 
-                    border-radius: 6px;
-                    margin: 20px 0;
-                }}
                 .password-box {{ 
                     background-color: #e5e7eb; 
                     padding: 15px; 
@@ -236,15 +210,8 @@ class EmailService:
                     
                     {credentials_section}
                     
-                    <p>Please log in and change your password immediately for security.</p>
-                    
-                    <center>
-                        <a href="{login_link}" class="button">Login to QualCheck</a>
-                    </center>
-                    
                     <p><strong>Important:</strong></p>
                     <ul>
-                        <li>Change your password on first login</li>
                         <li>Keep your credentials secure</li>
                         <li>Contact support if you have any issues</li>
                     </ul>
