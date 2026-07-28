@@ -232,10 +232,10 @@ class Navigation:
         # Smooth fade out before changing the screen
         if self.page.controls:
             for c in self.page.controls:
-                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
+                c.animate_opacity = ft.Animation(300, ft.AnimationCurve.EASE_OUT)
                 c.opacity = 0
             self.page.update()
-            time.sleep(0.2)
+            time.sleep(0.3)
             
         self.page.clean()
         self.page.appbar = None
