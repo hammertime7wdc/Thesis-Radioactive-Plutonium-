@@ -17,3 +17,6 @@ supabase_wiring_instructions.txt
 .login_lockout.json
 backend_integration_requirements.txt
 libraries_used.txt
+
+tests/
+.pytest_cache/
