@@ -20,3 +20,5 @@ libraries_used.txt
 
 tests/
 .pytest_cache/
+supabase_storage_setup.sql
+test.py
