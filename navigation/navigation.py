@@ -237,6 +237,9 @@ class Navigation:
             self.page.update()
             time.sleep(0.3)
             
+        if self.page.data is None:
+            self.page.data = {}
+        self.page.data["auth_active"] = False
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 900
@@ -254,6 +257,13 @@ class Navigation:
     def navigate_to_reset_password(self):
         """Navigate to the reset password screen"""
         self._transition_id += 1
+        if self.page.data and self.page.data.get("auth_active") and "auth_controller" in self.page.data:
+            self.page.data["auth_controller"]["switch_to_reset_password"]()
+            return
+
+        if self.page.data is None:
+            self.page.data = {}
+        self.page.data["auth_active"] = False
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 900
