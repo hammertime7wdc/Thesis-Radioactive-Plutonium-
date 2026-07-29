@@ -27,156 +27,112 @@ except ModuleNotFoundError:
         page.add(ft.Text("Reset password screen is unavailable."))
 
 
-def main(page: ft.Page, nav=None):
-    page.title = "QualCheck Login"
-    page.window_width = 900
-    page.window_height = 780
-    page.window_min_width = 900
-    page.window_min_height = 780
-    page.window_resizable = True
-    page.padding = 0
-    page.bgcolor = "#0f1e30"
-    page.theme_mode = ft.ThemeMode.DARK
-    page.appbar = None  # Explicitly clear any existing app bar
-    page.clean()
-
-    # Track active lockout countdown state
-    lockout_timer_active = False
-
-    blob1 = ft.Container(
-        width=600,
-        height=600,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.12, ft.Colors.BLUE_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.BLUE_400),
-            ],
-            stops=[0.0, 1.0],
+def brand_header():
+    logo = ft.Container(
+        content=ft.Text("Q", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+        bgcolor=ft.Colors.BLUE_500,
+        width=38,
+        height=38,
+        border_radius=8,
+        alignment=ft.alignment.center,
+        shadow=ft.BoxShadow(
+            blur_radius=10, color=ft.Colors.BLUE_500, offset=ft.Offset(0, 0), spread_radius=2
         ),
-        left=-100,
-        top=-100,
     )
-    blob2 = ft.Container(
-        width=800,
-        height=800,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.08, ft.Colors.CYAN_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.CYAN_400),
-            ],
-            stops=[0.0, 1.0],
-        ),
-        right=-200,
-        bottom=-200,
+    brand = ft.Column(
+        [
+            ft.Text("QualCheck", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Semantic Evaluation System", size=11, color="#8b9bb4"),
+        ],
+        spacing=0,
     )
-    blob3 = ft.Container(
-        width=500,
-        height=500,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.10, ft.Colors.PURPLE_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.PURPLE_400),
-            ],
-            stops=[0.0, 1.0],
-        ),
-        left=100,
-        bottom=-100,
-    )
+    return ft.Row([logo, brand], spacing=12, alignment=ft.MainAxisAlignment.START)
 
-    def animate_blobs():
-        t = 0.0
-        while page.title == "QualCheck Login":
-            try:
-                blob1.top = -100 + 80 * math.sin(t)
-                blob1.left = -100 + 120 * math.cos(t * 0.8)
-                blob2.bottom = -200 + 100 * math.cos(t * 0.9)
-                blob2.right = -200 + 150 * math.sin(t * 0.7)
-                blob3.bottom = -100 + 120 * math.sin(t * 1.1)
-                blob3.left = 100 + 80 * math.cos(t * 0.6)
-                page.update()
-                time.sleep(0.05)
-                t += 0.05
-            except Exception:
-                break
 
-    threading.Thread(target=animate_blobs, daemon=True).start()
+GOOGLE_LOGO_URL = "assets/google.png"
 
-    def brand_header():
-        logo = ft.Container(
-            content=ft.Text("Q", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            bgcolor=ft.Colors.BLUE_500,
-            width=38,
-            height=38,
-            border_radius=8,
-            alignment=ft.alignment.center,
-            shadow=ft.BoxShadow(
-                blur_radius=10, color=ft.Colors.BLUE_500, offset=ft.Offset(0, 0), spread_radius=2
-            ),
-        )
-        brand = ft.Column(
+
+def google_button(label):
+    return ft.Container(
+        content=ft.Row(
             [
-                ft.Text("QualCheck", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Text("Semantic Evaluation System", size=11, color="#8b9bb4"),
+                ft.Image(src=GOOGLE_LOGO_URL, width=18, height=18),
+                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color="#1a1a1a"),
             ],
-            spacing=0,
-        )
-        return ft.Row([logo, brand], spacing=12, alignment=ft.MainAxisAlignment.START)
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        ),
+        bgcolor=ft.Colors.WHITE,
+        border_radius=8,
+        height=44,
+        width=400,
+        alignment=ft.alignment.center,
+        border=ft.border.all(1, "#d1d5db"),
+        ink=True,
+    )
 
-    GOOGLE_LOGO_URL = "assets/google.png"
 
-    def google_button(label):
-        return ft.Container(
-            content=ft.Row(
-                [
-                    ft.Image(src=GOOGLE_LOGO_URL, width=18, height=18),
-                    ft.Text(label, size=14, weight=ft.FontWeight.W_500, color="#1a1a1a"),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=10,
-            ),
-            bgcolor=ft.Colors.WHITE,
-            border_radius=8,
-            height=44,
-            width=400,
-            alignment=ft.alignment.center,
-            border=ft.border.all(1, "#d1d5db"),
-            ink=True,
-        )
+def or_divider():
+    line = ft.Container(height=1, bgcolor="#2a3b54", expand=True)
+    return ft.Row(
+        [line, ft.Text("or", size=12, color="#4a5b75"), line],
+        spacing=12,
+        width=400,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
-    def or_divider():
-        line = ft.Container(height=1, bgcolor="#2a3b54", expand=True)
-        return ft.Row(
-            [line, ft.Text("or", size=12, color="#4a5b75"), line],
-            spacing=12,
-            width=400,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
 
-    def text_field(hint="", password=False, reveal=False, read_only=False, value=""):
-        return ft.TextField(
-            hint_text=hint,
-            password=password,
-            can_reveal_password=reveal,
-            read_only=read_only,
-            value=value,
-            width=400,
-            height=44,
-            bgcolor="#1e2f46",
-            border_color="#2e4060",
-            focused_border_color=ft.Colors.BLUE_400,
-            text_size=14,
-            content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
-            hint_style=ft.TextStyle(color="#4a5b75"),
-            color=ft.Colors.WHITE,
-            border_radius=8,
-        )
+def text_field(hint="", password=False, reveal=False, read_only=False, value=""):
+    return ft.TextField(
+        hint_text=hint,
+        password=password,
+        can_reveal_password=reveal,
+        read_only=read_only,
+        value=value,
+        width=400,
+        height=44,
+        bgcolor="#1e2f46",
+        border_color="#2e4060",
+        focused_border_color=ft.Colors.BLUE_400,
+        text_size=14,
+        content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
+        hint_style=ft.TextStyle(color="#4a5b75"),
+        color=ft.Colors.WHITE,
+        border_radius=8,
+    )
 
-    # --- Standard Error Banner ---
+
+def build_sign_in_container(page: ft.Page, nav=None, on_go_to_create_account=None, on_forgot_password_cb=None):
+    def handle_go_to_create_account(e=None):
+        if on_go_to_create_account:
+            on_go_to_create_account(e)
+        else:
+            if page.data and page.data.get("auth_active") and "auth_controller" in page.data:
+                threading.Thread(
+                    target=page.data["auth_controller"]["switch_to_create_account"],
+                    daemon=True,
+                ).start()
+            else:
+                from screens.ui_create_account import main as create_account_main
+                threading.Thread(
+                    target=lambda: create_account_main(page, nav), daemon=True
+                ).start()
+
+    def handle_forgot_password(e=None):
+        if on_forgot_password_cb:
+            on_forgot_password_cb(e)
+        elif page.data and page.data.get("auth_active") and "auth_controller" in page.data:
+            threading.Thread(
+                target=page.data["auth_controller"]["switch_to_reset_password"],
+                daemon=True,
+            ).start()
+        else:
+            reset_password_main(page, nav)
+
+    lockout_timer_active = {"value": False}
+
     error_text = ft.Text("", size=12, color=ft.Colors.RED_400, visible=False)
 
-    # =========================================================
-    #  DESIGNER LOCKOUT BANNER COMPONENT
-    # =========================================================
     timer_display = ft.Text(
         "00:00",
         size=15,
@@ -230,9 +186,6 @@ def main(page: ft.Page, nav=None):
         visible=False,
     )
 
-    # =========================================================
-    #  SIGN IN FORM
-    # =========================================================
     si_email = text_field(hint="you@university.edu")
     si_password = text_field(password=True, reveal=True)
     sign_in_btn_content = ft.Row(
@@ -254,22 +207,17 @@ def main(page: ft.Page, nav=None):
     )
 
     def start_lockout_countdown(remaining_seconds: int):
-        """Runs the styled live timer countdown in the background."""
-        nonlocal lockout_timer_active
-        if lockout_timer_active:
+        if lockout_timer_active["value"]:
             return
 
-        lockout_timer_active = True
+        lockout_timer_active["value"] = True
 
         def countdown_thread():
-            nonlocal lockout_timer_active
             seconds_left = remaining_seconds
 
-            # Show the lockout banner & hide plain error text
             error_text.visible = False
             lockout_card.visible = True
 
-            # Style disabled button
             sign_in_btn.disabled = True
             sign_in_btn.bgcolor = "#1a2638"
             sign_in_btn.content = ft.Row(
@@ -291,7 +239,6 @@ def main(page: ft.Page, nav=None):
                 time.sleep(1)
                 seconds_left -= 1
 
-            # Restore normal state when countdown finishes
             if page.title == "QualCheck Login":
                 lockout_card.visible = False
                 error_text.value = "Lockout period ended. You may try logging in again."
@@ -303,19 +250,11 @@ def main(page: ft.Page, nav=None):
                 sign_in_btn.content = sign_in_btn_content
                 page.update()
 
-            lockout_timer_active = False
+            lockout_timer_active["value"] = False
 
         threading.Thread(target=countdown_thread, daemon=True).start()
 
     def _finish_login(supabase, auth_response, reset_button_fn, email_hint=None):
-        """
-        Shared post-authentication flow for both password and Google
-        sign-in: sets the session, checks is_active/role, persists the
-        local session file, resets the password-lockout counter (if this
-        was a password login), and navigates. reset_button_fn() restores
-        whichever button triggered this back to its normal state on
-        failure.
-        """
         supabase.auth.set_session(
             access_token=auth_response.session.access_token,
             refresh_token=auth_response.session.refresh_token,
@@ -355,17 +294,21 @@ def main(page: ft.Page, nav=None):
         if email_hint:
             reset_login_attempts(email_hint)
 
+        if page.data:
+            page.data["auth_active"] = False
+
         if nav:
-            # Fade out before navigation
             def fade_and_navigate():
-                page_fade.opacity = 0
-                page.update()
-                time.sleep(0.25)
+                if page.controls:
+                    for c in page.controls:
+                        c.opacity = 0
+                    page.update()
+                time.sleep(0.2)
                 if role == "admin":
                     nav.navigate_to_admin()
                 elif role == "evaluator":
                     nav.navigate_to_short_answer()
-            
+
             threading.Thread(target=fade_and_navigate, daemon=True).start()
         else:
             if role == "admin":
@@ -385,7 +328,7 @@ def main(page: ft.Page, nav=None):
         sign_in_btn.content = sign_in_btn_content
 
     def on_login(e):
-        if sign_in_btn.disabled or lockout_timer_active:
+        if sign_in_btn.disabled or lockout_timer_active["value"]:
             return
         if not si_email.value or not si_password.value:
             error_text.value = "Please enter email and password."
@@ -520,27 +463,6 @@ def main(page: ft.Page, nav=None):
     google_btn_signin = google_button("Continue with Google")
     google_btn_signin.on_click = on_google_login
 
-    def on_forgot_password(e):
-        reset_password_main(page, nav)
-
-    def on_go_to_create_account(e):
-        try:
-            from screens.ui_create_account import main as create_account_main
-        except ModuleNotFoundError:
-            page.clean()
-            page.add(ft.Text("Create account screen is unavailable."))
-            return
-
-        def switch():
-            # Ensure fade animation completes
-            page_fade.animate_opacity = ft.Animation(300, ft.AnimationCurve.EASE_OUT)
-            page_fade.opacity = 0
-            page.update()
-            time.sleep(0.35)  # Wait for animation to complete
-            create_account_main(page, nav)
-
-        threading.Thread(target=switch, daemon=True).start()
-
     sign_in_form = ft.Column(
         [
             brand_header(),
@@ -562,7 +484,7 @@ def main(page: ft.Page, nav=None):
                     ft.TextButton(
                         "Forgot password?",
                         style=ft.ButtonStyle(color=ft.Colors.BLUE_400, padding=ft.padding.all(0)),
-                        on_click=on_forgot_password,
+                        on_click=lambda e: handle_forgot_password(e),
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -582,7 +504,7 @@ def main(page: ft.Page, nav=None):
                     ft.TextButton(
                         "Create one",
                         style=ft.ButtonStyle(color=ft.Colors.BLUE_400, padding=ft.padding.all(0)),
-                        on_click=on_go_to_create_account,
+                        on_click=lambda e: handle_go_to_create_account(e),
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -593,9 +515,121 @@ def main(page: ft.Page, nav=None):
         horizontal_alignment=ft.CrossAxisAlignment.START,
     )
 
-    # =========================================================
-    #  TAB SWITCHER
-    # =========================================================
+    container = ft.Container(
+        content=sign_in_form,
+        padding=ft.padding.symmetric(horizontal=40, vertical=30),
+    )
+    return container, si_email
+
+
+def main(page: ft.Page, nav=None):
+    if page.data is None:
+        page.data = {}
+
+    if page.data.get("auth_active") and "auth_controller" in page.data:
+        page.data["auth_controller"]["switch_to_login"]()
+        return
+
+    page.title = "QualCheck Login"
+    page.window_width = 900
+    page.window_height = 780
+    page.window_min_width = 900
+    page.window_min_height = 780
+    page.window_resizable = True
+    page.padding = 0
+    page.bgcolor = "#0f1e30"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.appbar = None
+    page.clean()
+
+    blob1 = ft.Container(
+        width=600,
+        height=600,
+        gradient=ft.RadialGradient(
+            colors=[
+                ft.Colors.with_opacity(0.12, ft.Colors.BLUE_400),
+                ft.Colors.with_opacity(0.0, ft.Colors.BLUE_400),
+            ],
+            stops=[0.0, 1.0],
+        ),
+        left=-100,
+        top=-100,
+    )
+    blob2 = ft.Container(
+        width=800,
+        height=800,
+        gradient=ft.RadialGradient(
+            colors=[
+                ft.Colors.with_opacity(0.08, ft.Colors.CYAN_400),
+                ft.Colors.with_opacity(0.0, ft.Colors.CYAN_400),
+            ],
+            stops=[0.0, 1.0],
+        ),
+        right=-200,
+        bottom=-200,
+    )
+    blob3 = ft.Container(
+        width=500,
+        height=500,
+        gradient=ft.RadialGradient(
+            colors=[
+                ft.Colors.with_opacity(0.10, ft.Colors.PURPLE_400),
+                ft.Colors.with_opacity(0.0, ft.Colors.PURPLE_400),
+            ],
+            stops=[0.0, 1.0],
+        ),
+        left=100,
+        bottom=-100,
+    )
+
+    page.data["auth_active"] = True
+
+    def animate_blobs():
+        t = 0.0
+        while page.title in ("QualCheck Login", "QualCheck Create Account", "QualCheck - Reset Password") and page.data.get("auth_active", False):
+            try:
+                blob1.top = -100 + 80 * math.sin(t)
+                blob1.left = -100 + 120 * math.cos(t * 0.8)
+                blob2.bottom = -200 + 100 * math.cos(t * 0.9)
+                blob2.right = -200 + 150 * math.sin(t * 0.7)
+                blob3.bottom = -100 + 120 * math.sin(t * 1.1)
+                blob3.left = 100 + 80 * math.cos(t * 0.6)
+                page.update()
+                time.sleep(0.05)
+                t += 0.05
+            except Exception:
+                break
+
+    threading.Thread(target=animate_blobs, daemon=True).start()
+
+    def on_go_to_create_account(e=None):
+        if page.data and page.data.get("auth_active") and "auth_controller" in page.data:
+            threading.Thread(
+                target=page.data["auth_controller"]["switch_to_create_account"],
+                daemon=True,
+            ).start()
+        else:
+            from screens.ui_create_account import main as create_account_main
+            threading.Thread(
+                target=lambda: create_account_main(page, nav), daemon=True
+            ).start()
+
+    def on_go_to_sign_in(e=None, prefill_email=None):
+        if page.data and page.data.get("auth_active") and "auth_controller" in page.data:
+            threading.Thread(
+                target=lambda: page.data["auth_controller"]["switch_to_login"](prefill_email),
+                daemon=True,
+            ).start()
+
+    def on_forgot_password_cb(e=None):
+        if page.data and page.data.get("auth_active") and "auth_controller" in page.data:
+            threading.Thread(
+                target=page.data["auth_controller"]["switch_to_reset_password"],
+                daemon=True,
+            ).start()
+        else:
+            reset_password_main(page, nav)
+
     tab_signin = ft.Container(
         content=ft.Text(
             "Sign In",
@@ -609,6 +643,7 @@ def main(page: ft.Page, nav=None):
         expand=True,
         alignment=ft.alignment.center,
         border_radius=ft.border_radius.only(top_left=16),
+        on_click=lambda e: on_go_to_sign_in(e),
         ink=True,
     )
     tab_create = ft.Container(
@@ -624,7 +659,7 @@ def main(page: ft.Page, nav=None):
         expand=True,
         alignment=ft.alignment.center,
         border_radius=ft.border_radius.only(top_right=16),
-        on_click=on_go_to_create_account,
+        on_click=lambda e: on_go_to_create_account(e),
         ink=True,
     )
     ind_signin = ft.Container(height=2, bgcolor=ft.Colors.BLUE_500, expand=True)
@@ -637,15 +672,123 @@ def main(page: ft.Page, nav=None):
         spacing=0,
         expand=True,
     )
+    tab_divider = ft.Container(height=1, bgcolor="#1e2f46")
+
+    sign_in_container, si_email_ref = build_sign_in_container(page, nav, on_go_to_create_account, on_forgot_password_cb)
+    create_account_holder = {"container": None}
+    reset_password_holder = {"container": None}
+    switching_lock = {"active": False}
+
+    form_wrapper = ft.Container(
+        content=sign_in_container,
+        animate_opacity=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
+        opacity=1,
+    )
+
+    def switch_to_create_account():
+        if switching_lock["active"]:
+            return
+        switching_lock["active"] = True
+
+        if create_account_holder["container"] is None:
+            from screens.ui_create_account import build_create_account_container
+            ca_cont, _ = build_create_account_container(page, nav, on_go_to_sign_in)
+            create_account_holder["container"] = ca_cont
+
+        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
+        form_wrapper.opacity = 0
+        page.update()
+        time.sleep(0.18)
+
+        tab_row.visible = True
+        tab_divider.visible = True
+
+        tab_signin.bgcolor = "#161f2e"
+        tab_signin.content.color = "#6b7f99"
+        tab_signin.content.weight = ft.FontWeight.W_500
+        ind_signin.bgcolor = "transparent"
+
+        tab_create.bgcolor = "#1c2c44"
+        tab_create.content.color = ft.Colors.WHITE
+        tab_create.content.weight = ft.FontWeight.BOLD
+        ind_create.bgcolor = ft.Colors.BLUE_500
+
+        page.title = "QualCheck Create Account"
+        form_wrapper.content = create_account_holder["container"]
+        form_wrapper.opacity = 1
+        page.update()
+
+        switching_lock["active"] = False
+
+    def switch_to_login(prefill_email=None):
+        if switching_lock["active"]:
+            return
+        switching_lock["active"] = True
+
+        if prefill_email and si_email_ref:
+            si_email_ref.value = prefill_email
+
+        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
+        form_wrapper.opacity = 0
+        page.update()
+        time.sleep(0.18)
+
+        tab_row.visible = True
+        tab_divider.visible = True
+
+        tab_create.bgcolor = "#161f2e"
+        tab_create.content.color = "#6b7f99"
+        tab_create.content.weight = ft.FontWeight.W_500
+        ind_create.bgcolor = "transparent"
+
+        tab_signin.bgcolor = "#1c2c44"
+        tab_signin.content.color = ft.Colors.WHITE
+        tab_signin.content.weight = ft.FontWeight.BOLD
+        ind_signin.bgcolor = ft.Colors.BLUE_500
+
+        page.title = "QualCheck Login"
+        form_wrapper.content = sign_in_container
+        form_wrapper.opacity = 1
+        page.update()
+
+        switching_lock["active"] = False
+
+    def switch_to_reset_password():
+        if switching_lock["active"]:
+            return
+        switching_lock["active"] = True
+
+        if reset_password_holder["container"] is None:
+            from screens.password_reset import build_reset_password_container
+            reset_password_holder["container"] = build_reset_password_container(page, nav, on_go_to_sign_in)
+
+        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
+        form_wrapper.opacity = 0
+        page.update()
+        time.sleep(0.18)
+
+        tab_row.visible = False
+        tab_divider.visible = False
+
+        page.title = "QualCheck - Reset Password"
+        form_wrapper.content = reset_password_holder["container"]
+        form_wrapper.opacity = 1
+        page.update()
+
+        switching_lock["active"] = False
+
+    page.data["auth_controller"] = {
+        "switch_to_login": switch_to_login,
+        "switch_to_create_account": switch_to_create_account,
+        "switch_to_reset_password": switch_to_reset_password,
+    }
 
     card = ft.Container(
         content=ft.Column(
             [
                 tab_row,
-                ft.Container(height=1, bgcolor="#1e2f46"),
-                ft.Container(
-                    content=sign_in_form, padding=ft.padding.symmetric(horizontal=40, vertical=30)
-                ),
+                tab_divider,
+                form_wrapper,
             ],
             spacing=0,
         ),
@@ -722,5 +865,4 @@ def main(page: ft.Page, nav=None):
 
 
 if __name__ == "__main__":
-    # Added assets_dir="assets" so local relative paths resolve cleanly
     ft.app(target=main, assets_dir="assets")
