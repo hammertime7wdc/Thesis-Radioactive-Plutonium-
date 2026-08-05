@@ -474,15 +474,21 @@ class Navigation:
             self.page.add(self.main_content)
         self.page.update()
 
-    def navigate_to_student_result(self, results=None, academic_prompt=None, rubric=None):
+    def navigate_to_student_result(self, results=None, academic_prompt=None, rubric=None, output_type_label="Short Answer", theta1=None, theta2=None):
         """Navigate to student results screen"""
         # Store evaluation data
         self.evaluation_results = results
         self.evaluation_prompt = academic_prompt
         self.evaluation_rubric = rubric
+        self.evaluation_output_type_label = output_type_label
+        self.evaluation_theta1 = theta1
+        self.evaluation_theta2 = theta2
         
         self.current_view = "evaluation"
-        self._swap_evaluator_content(lambda: studenta_result_main(self.page, self, results, academic_prompt, rubric))
+        self._swap_evaluator_content(
+            lambda: studenta_result_main(self.page, self, results, academic_prompt, rubric, output_type_label,
+                                          theta1=theta1, theta2=theta2)
+        )
 
     def navigate_to_admin(self):
         """Navigate to admin panel"""
