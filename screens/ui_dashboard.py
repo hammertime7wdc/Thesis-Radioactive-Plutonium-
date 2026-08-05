@@ -2,6 +2,8 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from datetime import datetime, timezone
+
 import flet as ft
 from utils.utils import (
     BG_COLOR, CARD_BG_COLOR, SECTION_BG_COLOR,
@@ -12,26 +14,169 @@ from utils.utils import (
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
     SUCCESS, WARNING, ERROR
 )
+from services.supabase_client import get_supabase_client
+from services.session_manager import get_current_user
 
-# ============================================================
-# PLACEHOLDER DATA
-# ============================================================
-
-PLACEHOLDER_STATS = {
-    "total_evaluations": 0,
-    "fully_relevant": 0,
-    "partially_relevant": 0,
-    "irrelevant": 0,
-    "avg_similarity_score": 0.0,
+OUTPUT_TYPE_LABELS = {
+    "short_answer": "Short Answer",
+    "essay": "Essay",
+    "code_report": "Code Report",
 }
+OUTPUT_TYPE_KEYS = {label: key for key, label in OUTPUT_TYPE_LABELS.items()}
 
-PLACEHOLDER_OUTPUT_TYPES = [
-    ("Short Answer", 0, 0.0),
-    ("Essay", 0, 0.0),
-    ("Code Report", 0, 0.0),
-]
 
-PLACEHOLDER_RECENT_EVALUATIONS = []
+def _fetch_user_evaluations(user_id: str) -> list:
+    """Pull this user's own evaluation rows, most recent first."""
+    if not user_id:
+        return []
+    supabase = get_supabase_client()
+    try:
+        resp = (
+            supabase.table("evaluations")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data or []
+    except Exception as fetch_error:
+        print(f"Failed to fetch evaluations for dashboard: {fetch_error}")
+        return []
+
+
+def _compute_stats(evaluations: list) -> dict:
+    total = len(evaluations)
+    fully = sum(1 for e in evaluations if e.get("classification") == "Fully Relevant")
+    partial = sum(1 for e in evaluations if e.get("classification") == "Partially Relevant")
+    irrelevant = sum(1 for e in evaluations if e.get("classification") == "Irrelevant")
+
+    sims = [e.get("similarity_score") for e in evaluations if e.get("similarity_score") is not None]
+    avg_sim_pct = (sum(sims) / len(sims) * 100) if sims else 0.0
+    avg_sim_pct = max(0.0, min(100.0, avg_sim_pct))
+
+    return {
+        "total_evaluations": total,
+        "fully_relevant": fully,
+        "partially_relevant": partial,
+        "irrelevant": irrelevant,
+        "avg_similarity_score": avg_sim_pct,
+    }
+
+
+def _compute_output_type_breakdown(evaluations: list) -> list:
+    total = len(evaluations)
+    counts = {key: 0 for key in OUTPUT_TYPE_LABELS}
+    for e in evaluations:
+        ot = e.get("output_type")
+        if ot in counts:
+            counts[ot] += 1
+
+    breakdown = []
+    for key, label in OUTPUT_TYPE_LABELS.items():
+        count = counts[key]
+        progress = (count / total) if total else 0.0
+        breakdown.append((label, count, progress))
+    return breakdown
+
+
+def _normalize_similarity_score(value):
+    if value is None:
+        return None
+    try:
+        similarity = float(value)
+    except (TypeError, ValueError):
+        return None
+    if similarity > 1.0:
+        return similarity / 100.0
+    return similarity
+
+
+def _classify_score(score_pct: float) -> str:
+    if score_pct >= 75:
+        return "Fully Relevant"
+    if score_pct >= 50:
+        return "Partially Relevant"
+    return "Irrelevant"
+
+
+def _build_live_evaluations(nav) -> list:
+    if not nav:
+        return []
+
+    live_results = getattr(nav, "evaluation_results", None) or []
+    if not live_results:
+        return []
+
+    prompt = getattr(nav, "evaluation_prompt", "") or ""
+    output_type_label = getattr(nav, "evaluation_output_type_label", "Short Answer") or "Short Answer"
+    output_type_key = OUTPUT_TYPE_KEYS.get(output_type_label, "short_answer")
+
+    live_evaluations = []
+    for result in live_results:
+        score_pct = float(result.get("score", 0.0) or 0.0)
+        similarity_score = _normalize_similarity_score(result.get("similarity_score"))
+        if similarity_score is None:
+            similarity_score = score_pct / 100.0 if score_pct > 1.0 else score_pct
+
+        live_evaluations.append(
+            {
+                "name": result.get("name") or result.get("file") or "Untitled",
+                "file_name": result.get("file") or result.get("file_name") or result.get("name") or "Untitled",
+                "prompt": prompt,
+                "rubric_id": None,
+                "output_type": output_type_key,
+                "output_type_label": output_type_label,
+                "similarity_score": similarity_score,
+                "classification": result.get("classification") or _classify_score(score_pct),
+                "created_at": "just now",
+                "source": "live",
+            }
+        )
+
+    return live_evaluations
+
+
+def _merge_evaluations(live_evaluations: list, saved_evaluations: list) -> list:
+    merged = []
+    seen = set()
+
+    def add_rows(rows: list):
+        for evaluation in rows:
+            key = (
+                evaluation.get("output_type") or evaluation.get("output_type_label") or "",
+                evaluation.get("file_name") or evaluation.get("name") or "",
+                evaluation.get("prompt") or "",
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(evaluation)
+
+    add_rows(live_evaluations)
+    add_rows(saved_evaluations)
+    return merged
+
+
+def _format_relative_time(created_at: str) -> str:
+    if not created_at:
+        return ""
+    try:
+        ts = created_at.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - dt
+        seconds = delta.total_seconds()
+        if seconds < 60:
+            return "just now"
+        if seconds < 3600:
+            return f"{int(seconds // 60)}m ago"
+        if seconds < 86400:
+            return f"{int(seconds // 3600)}h ago"
+        return dt.strftime("%b %d, %Y")
+    except Exception:
+        return created_at
+
 
 def main(page: ft.Page, nav=None, role="evaluator"):
     page.title = "QualCheck - Dashboard"
@@ -39,6 +184,22 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     page.bgcolor = BG_COLOR
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
+
+    current_user = get_current_user()
+    if not current_user:
+        if nav and hasattr(nav, "navigate_to_login"):
+            nav.navigate_to_login()
+        return
+
+    user_identity = getattr(current_user, "user", current_user)
+    user_id = getattr(user_identity, "id", None)
+
+    evaluations = _fetch_user_evaluations(user_id)
+    live_evaluations = _build_live_evaluations(nav)
+    dashboard_evaluations = _merge_evaluations(live_evaluations, evaluations)
+    stats = _compute_stats(dashboard_evaluations)
+    output_types = _compute_output_type_breakdown(dashboard_evaluations)
+    recent_evaluations = dashboard_evaluations[:10]
 
     # ------------------------------------------------------------------
     # Header
@@ -48,7 +209,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             [
                 ft.Text("Evaluation Dashboard", size=26, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                 ft.Container(height=6),
-                ft.Text("Overview of all evaluations processed by QualCheck", size=13, color=TEXT_SECONDARY),
+                ft.Text("Overview of your evaluations processed by QualCheck", size=13, color=TEXT_SECONDARY),
             ],
             spacing=0,
         ),
@@ -68,8 +229,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             content_items.append(ft.Container(height=4))
             content_items.append(ft.Text(subtitle, size=11, color=TEXT_TERTIARY))
         else:
-            # Add spacer to keep card heights uniform when there is no subtitle
-            content_items.append(ft.Container(height=19)) 
+            content_items.append(ft.Container(height=19))
 
         return ft.Container(
             content=ft.Column(content_items, spacing=0),
@@ -84,23 +244,22 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             ),
         )
 
-    total = PLACEHOLDER_STATS["total_evaluations"]
+    total = stats["total_evaluations"]
 
     def pct_of_total(n):
         if not total:
             return "0% of total"
         return f"{round((n / total) * 100)}% of total"
 
-    # Using ResponsiveRow to ensure they fit side-by-side flawlessly
     stats_row = ft.ResponsiveRow(
         controls=[
-            ft.Container(stat_card(PRIMARY_BLUE, "Total Evaluations", PLACEHOLDER_STATS["total_evaluations"]), col={"sm": 6, "md": 3}),
-            ft.Container(stat_card(SUCCESS, "Fully Relevant", PLACEHOLDER_STATS["fully_relevant"],
-                      subtitle=pct_of_total(PLACEHOLDER_STATS["fully_relevant"]), value_color=SUCCESS), col={"sm": 6, "md": 3}),
-            ft.Container(stat_card(WARNING, "Partially Relevant", PLACEHOLDER_STATS["partially_relevant"],
-                      subtitle=pct_of_total(PLACEHOLDER_STATS["partially_relevant"]), value_color=WARNING), col={"sm": 6, "md": 3}),
-            ft.Container(stat_card(ERROR, "Irrelevant", PLACEHOLDER_STATS["irrelevant"],
-                      subtitle=pct_of_total(PLACEHOLDER_STATS["irrelevant"]), value_color=ERROR), col={"sm": 6, "md": 3}),
+            ft.Container(stat_card(PRIMARY_BLUE, "Total Evaluations", stats["total_evaluations"]), col={"sm": 6, "md": 3}),
+            ft.Container(stat_card(SUCCESS, "Fully Relevant", stats["fully_relevant"],
+                      subtitle=pct_of_total(stats["fully_relevant"]), value_color=SUCCESS), col={"sm": 6, "md": 3}),
+            ft.Container(stat_card(WARNING, "Partially Relevant", stats["partially_relevant"],
+                      subtitle=pct_of_total(stats["partially_relevant"]), value_color=WARNING), col={"sm": 6, "md": 3}),
+            ft.Container(stat_card(ERROR, "Irrelevant", stats["irrelevant"],
+                      subtitle=pct_of_total(stats["irrelevant"]), value_color=ERROR), col={"sm": 6, "md": 3}),
         ],
         spacing=16,
         run_spacing=16,
@@ -115,12 +274,12 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 ft.Text("Average Similarity Score", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                 ft.Container(height=24),
                 ft.Text(
-                    f"{PLACEHOLDER_STATS['avg_similarity_score']:.1f}%",
+                    f"{stats['avg_similarity_score']:.1f}%",
                     size=42, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE,
                 ),
                 ft.Container(height=12),
                 ft.ProgressBar(
-                    value=PLACEHOLDER_STATS["avg_similarity_score"] / 100,
+                    value=stats["avg_similarity_score"] / 100,
                     bgcolor=SECTION_BG_COLOR,
                     color=PRIMARY_BLUE,
                     height=8,
@@ -163,7 +322,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             [
                 ft.Text("By Output Type", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                 ft.Container(height=20),
-                *[output_type_row(label, count, progress) for label, count, progress in PLACEHOLDER_OUTPUT_TYPES],
+                *[output_type_row(label, count, progress) for label, count, progress in output_types],
             ],
             spacing=0,
         ),
@@ -189,7 +348,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         return ft.Container(
             content=ft.Column(
                 [
-                    ft.Image(src="https://img.icons8.com/fluency/48/000000/bar-chart.png", width=48, height=48), # Placeholder icon
+                    ft.Image(src="https://img.icons8.com/fluency/48/000000/bar-chart.png", width=48, height=48),
                     ft.Container(height=12),
                     ft.Text("No evaluations yet. Create your first evaluation to see results here.",
                             size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
@@ -201,9 +360,65 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             alignment=ft.alignment.center,
         )
 
-    if PLACEHOLDER_RECENT_EVALUATIONS:
-        # Build out populated rows here later
-        recent_content = ft.Column([]) 
+    def classification_badge(classification: str):
+        color_map = {
+            "Fully Relevant": (SUCCESS, "#dcfce7"),
+            "Partially Relevant": (WARNING, "#fef3c7"),
+            "Irrelevant": (ERROR, "#fee2e2"),
+        }
+        color, bg = color_map.get(classification, (TEXT_SECONDARY, SECTION_BG_COLOR))
+        return ft.Container(
+            content=ft.Text(classification or "—", size=11, color=color, weight=ft.FontWeight.W_600),
+            bgcolor=bg,
+            border_radius=20,
+            padding=ft.padding.symmetric(horizontal=10, vertical=4),
+        )
+
+    def recent_evaluation_row(evaluation: dict):
+        sim = evaluation.get("similarity_score")
+        sim_pct = max(0.0, min(100.0, sim * 100)) if sim is not None else None
+        output_type_label = OUTPUT_TYPE_LABELS.get(evaluation.get("output_type"), evaluation.get("output_type") or "—")
+        title = evaluation.get("file_name") or (evaluation.get("prompt") or "")[:60] or "Untitled"
+
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=16, color=TEXT_SECONDARY),
+                        width=32, height=32, border_radius=16, bgcolor=SECTION_BG_COLOR,
+                        alignment=ft.alignment.center,
+                    ),
+                    ft.Column(
+                        [
+                            ft.Text(title, size=13, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                            ft.Text(
+                                f"{output_type_label} · {_format_relative_time(evaluation.get('created_at'))}",
+                                size=11, color=TEXT_TERTIARY,
+                            ),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.Text(
+                        f"{sim_pct:.1f}%" if sim_pct is not None else "—",
+                        size=13, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY, width=60,
+                        text_align=ft.TextAlign.RIGHT,
+                    ),
+                    classification_badge(evaluation.get("classification")),
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.padding.symmetric(vertical=10),
+        )
+
+    if recent_evaluations:
+        rows = []
+        for i, ev in enumerate(recent_evaluations):
+            rows.append(recent_evaluation_row(ev))
+            if i < len(recent_evaluations) - 1:
+                rows.append(ft.Divider(height=1, color=BORDER_COLOR))
+        recent_content = ft.Column(rows, spacing=0)
     else:
         recent_content = empty_state()
 
@@ -244,6 +459,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         nav.main_content = main_content
     else:
         page.add(main_content)
+
 
 if __name__ == "__main__":
     ft.app(target=main)

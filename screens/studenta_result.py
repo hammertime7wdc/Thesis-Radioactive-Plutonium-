@@ -18,61 +18,18 @@ from utils.utils import (
 PURPLE = "#8b5cf6"
 PURPLE_BG = "#f5f3ff"
 
-# =============================================================================
-# PLACEHOLDER DATA — replace this block with the real evaluation results
-# (e.g. passed in via a `results` param, fetched from Supabase, etc.)
-#
-# Expected shape for each student dict:
-#   {
-#       "name": str,                       # student / file display name
-#       "file": str,                       # original filename
-#       "score": float,                    # 0-100 overall similarity score
-#       "criteria": [(str, int), ...],     # (criterion_name, 0-100 score) pairs
-#   }
-# =============================================================================
-PLACEHOLDER_STUDENTS = [
-    {
-        "name": "Student 1",
-        "file": "student_1.pdf",
-        "score": 0.0,
-        "criteria": [
-            ("Criterion 1", 0),
-            ("Criterion 2", 0),
-            ("Criterion 3", 0),
-        ],
-    },
-    {
-        "name": "Student 2",
-        "file": "student_2.pdf",
-        "score": 0.0,
-        "criteria": [
-            ("Criterion 1", 0),
-            ("Criterion 2", 0),
-            ("Criterion 3", 0),
-        ],
-    },
-    {
-        "name": "Student 3",
-        "file": "student_3.pdf",
-        "score": 0.0,
-        "criteria": [
-            ("Criterion 1", 0),
-            ("Criterion 2", 0),
-            ("Criterion 3", 0),
-        ],
-    },
-]
-
-# Replace with the real prompt text and rubric passed into this evaluation.
-ACADEMIC_PROMPT = "Placeholder academic prompt text."
-RUBRIC = [
-    ("Criterion 1", "Placeholder criterion description"),
-    ("Criterion 2", "Placeholder criterion description"),
-    ("Criterion 3", "Placeholder criterion description"),
-]
+CLASSIFICATION_STYLES = {
+    "Fully Relevant": (SUCCESS, "#dcfce7"),
+    "Partially Relevant": (WARNING, "#fef3c7"),
+    "Irrelevant": (ERROR, "#fee2e2"),
+}
 
 
 def classify(score: float):
+    """Fallback only — used if a student dict somehow arrives without a
+    precomputed classification. Real evaluation results carry their own
+    `classification` (computed with the model's actual theta1/theta2),
+    which resolve_label() prefers over this."""
     if score >= 75:
         return "Fully Relevant", SUCCESS, "#dcfce7"
     elif score >= 50:
@@ -81,30 +38,54 @@ def classify(score: float):
         return "Irrelevant", ERROR, "#fee2e2"
 
 
-def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=None):
+def resolve_label(student: dict):
+    """Prefer the classification already computed by the evaluator (correct
+    per-model theta1/theta2) over recomputing from a fixed 75/50 split."""
+    label = student.get("classification")
+    if label and label in CLASSIFICATION_STYLES:
+        color, bg = CLASSIFICATION_STYLES[label]
+        return label, color, bg
+    return classify(student["score"])
+
+
+def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=None,
+         output_type_label="Short Answer", theta1=None, theta2=None):
     """
-    results: optional list of student dicts (see PLACEHOLDER_STUDENTS shape above).
-             Falls back to placeholder data if not provided, so this screen
-             renders standalone until it's wired up to real evaluation output.
-    academic_prompt: optional str, overrides ACADEMIC_PROMPT placeholder.
-    rubric: optional list of (name, description) tuples, overrides RUBRIC placeholder.
+    results: list of student dicts, shape:
+        {
+            "name": str,                       # student / file display name
+            "file": str,                       # original filename
+            "score": float,                    # 0-100 overall similarity score
+            "classification": str,             # "Fully Relevant" / "Partially Relevant" / "Irrelevant"
+            "criteria": [(str, int), ...],     # (criterion_name, 0-100 score) pairs
+        }
+    academic_prompt: str, the prompt used for this evaluation.
+    rubric: list of (name, description) tuples, the rubric used for this evaluation.
+    output_type_label: display label for the header ("Short Answer" / "Essay" / "Code Report").
     """
     page.title = "QualCheck Evaluation - Results"
     page.scroll = ft.ScrollMode.AUTO
     page.bgcolor = BG_COLOR
     page.theme_mode = ft.ThemeMode.LIGHT
 
-    students = results if results else PLACEHOLDER_STUDENTS
-    prompt_text = academic_prompt if academic_prompt else ACADEMIC_PROMPT
-    rubric_items_data = rubric if rubric else RUBRIC
+    if not results:
+        # Nothing to show — bail back to the dashboard rather than rendering
+        # against fake data.
+        if nav and hasattr(nav, "navigate_to_dashboard"):
+            nav.navigate_to_dashboard()
+        return
+
+    students = results
+    prompt_text = academic_prompt or ""
+    rubric_items_data = rubric or []
     sort_mode = {"value": "score"}  # "score" or "name"
 
     total_students = len(students)
     avg_score = sum(s["score"] for s in students) / total_students
     top_score = max(s["score"] for s in students)
-    fully = sum(1 for s in students if classify(s["score"])[0] == "Fully Relevant")
-    partial = sum(1 for s in students if classify(s["score"])[0] == "Partially Relevant")
-    irrelevant = sum(1 for s in students if classify(s["score"])[0] == "Irrelevant")
+    fully = sum(1 for s in students if resolve_label(s)[0] == "Fully Relevant")
+    partial = sum(1 for s in students if resolve_label(s)[0] == "Partially Relevant")
+    irrelevant = sum(1 for s in students if resolve_label(s)[0] == "Irrelevant")
 
     # -----------------------------------------------------------------
     # Header
@@ -137,7 +118,7 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
                         ),
                         ft.Container(height=2),
                         ft.Text(
-                            f"Short Answer · {total_students} students · {datetime.now().strftime('%#m/%#d/%Y')}",
+                            f"{output_type_label} · {total_students} students · {datetime.now().strftime('%#m/%#d/%Y')}",
                             size=13,
                             color=TEXT_SECONDARY,
                         ),
@@ -378,7 +359,17 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
     student_list_column = ft.Column(spacing=0)
 
     def criterion_row(label, pct):
-        color = SUCCESS if pct >= 75 else (WARNING if pct >= 50 else ERROR)
+        # Use the model's REAL calibrated theta1/theta2 (per-criterion similarity
+        # is a raw 0-1 cosine score, same scale the classifier itself uses) instead
+        # of a hardcoded 75/50 split. Previously this used a generic 75/50 cutoff
+        # completely disconnected from the actual model thresholds, so a criterion
+        # could render green/"good" while still sitting well below what the model
+        # requires for Fully Relevant — misleading given the overall label uses
+        # the real thresholds. Falls back to 75/50 only if theta1/theta2 weren't
+        # passed in (e.g. an older caller), so this never hard-crashes.
+        t1 = theta1 * 100 if theta1 is not None else 75
+        t2 = theta2 * 100 if theta2 is not None else 50
+        color = SUCCESS if pct >= t1 else (WARNING if pct >= t2 else ERROR)
         return ft.Row(
             [
                 ft.Text(label, size=13, color=TEXT_SECONDARY, width=150),
@@ -399,7 +390,7 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
         )
 
     def build_row(student, rank):
-        label, color, bg = classify(student["score"])
+        label, color, bg = resolve_label(student)
         expanded = {"value": rank == 1}  # first row expanded to match reference design
 
         detail_panel = ft.Container(
