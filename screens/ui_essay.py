@@ -441,6 +441,9 @@ def main(page: ft.Page, nav=None):
                                 "classification": classification,
                                 "file_name": f["name"],
                                 "file_path": f["path"],
+                                "criterion_scores": {
+                                    name: round(v["similarity"], 4) for name, v in scores.items()
+                                },
                             }
                         ).execute()
                     except Exception as db_error:

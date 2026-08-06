@@ -12,6 +12,7 @@ from utils.utils import (
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
     SUCCESS, WARNING, ERROR
 )
+from services.submissions_services import fetch_submissions
 
 
 def main(page: ft.Page, nav=None):
@@ -64,25 +65,8 @@ def main(page: ft.Page, nav=None):
     else:
         admin_header = None
 
-    # --- Submissions data (mock — swap for a real service call when ready) ---
-    SUBMISSIONS_DATA = [
-        {"file": "juan_dela_cruz.pdf", "score": "88%", "classification": ["Fully Relevant"],
-         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:12"},
-        {"file": "maria_reyes.pdf", "score": "63%", "classification": ["Fully Relevant", "Partially Relevant"],
-         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:13"},
-        {"file": "pedro_garcia.pdf", "score": "41%", "classification": ["Irrelevant"],
-         "type": "Essay", "evaluator": "Prof. Santos", "date": "2025-06-24 09:14"},
-        {"file": "ana_torres.pdf", "score": "79%", "classification": ["Fully Relevant"],
-         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-23 14:05"},
-        {"file": "carlos_mendoza.pdf", "score": "55%", "classification": ["Partially Relevant"],
-         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-23 14:06"},
-        {"file": "sofia_lim.pdf", "score": "91%", "classification": ["Fully Relevant"],
-         "type": "Short Answer", "evaluator": "Prof. Lee", "date": "2025-06-22 11:30"},
-        {"file": "marco_santos.pdf", "score": "48%", "classification": ["Partially Relevant", "Irrelevant"],
-         "type": "Short Answer", "evaluator": "Prof. Lee", "date": "2025-06-22 11:31"},
-        {"file": "nina_cruz.pdf", "score": "82%", "classification": ["Fully Relevant"],
-         "type": "Code Report", "evaluator": "Prof. Chen", "date": "2025-06-21 16:20"},
-    ]
+    # --- Submissions data (real — fetched from Supabase) ---
+    SUBMISSIONS_DATA = fetch_submissions()
 
     # --- Classification Badge Helpers ---
     def classification_badge(label):
@@ -118,17 +102,6 @@ def main(page: ft.Page, nav=None):
             )
         )
 
-    def override_cell():
-        return ft.DataCell(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.EDIT, size=14, color=PRIMARY_BLUE),
-                    ft.Text("Override", size=12, color=PRIMARY_BLUE, weight=ft.FontWeight.W_500),
-                ],
-                spacing=4,
-            )
-        )
-
     def build_row(item):
         return ft.DataRow(
             cells=[
@@ -138,7 +111,6 @@ def main(page: ft.Page, nav=None):
                 ft.DataCell(ft.Text(item["type"], size=13, color=TEXT_SECONDARY)),
                 ft.DataCell(ft.Text(item["evaluator"], size=13, color=TEXT_SECONDARY)),
                 ft.DataCell(ft.Text(item["date"], size=13, color=TEXT_SECONDARY)),
-                override_cell(),
             ],
         )
 
@@ -146,7 +118,7 @@ def main(page: ft.Page, nav=None):
         return [
             ft.DataRow(cells=[
                 ft.DataCell(ft.Text(msg, color=TEXT_SECONDARY)),
-            ] + [ft.DataCell(ft.Text("")) for _ in range(6)])
+            ] + [ft.DataCell(ft.Text("")) for _ in range(5)])
         ]
 
     # --- Search + Classification Filter state ---
@@ -167,7 +139,7 @@ def main(page: ft.Page, nav=None):
         submissions_table.rows = [build_row(item) for item in filtered] if filtered else empty_row()
         page.update()
 
-    # --- Search bar (same styling as the Users page search bar) ---
+    # --- Search bar ---
     search_bar = ft.TextField(
         hint_text="Search student, evaluator, subject…",
         prefix_icon=ft.Icons.SEARCH,
@@ -270,7 +242,6 @@ def main(page: ft.Page, nav=None):
             ft.DataColumn(ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
             ft.DataColumn(ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
             ft.DataColumn(ft.Text("DATE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("ACTIONS", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
         ],
         border=ft.border.all(1, BORDER_COLOR),
         border_radius=8,
@@ -280,7 +251,7 @@ def main(page: ft.Page, nav=None):
         heading_row_color=SECTION_BG_COLOR,
         data_row_min_height=56,
         show_bottom_border=True,
-        rows=[build_row(item) for item in SUBMISSIONS_DATA],
+        rows=[build_row(item) for item in SUBMISSIONS_DATA] if SUBMISSIONS_DATA else empty_row(),
     )
 
     # --- Submissions Card container ---

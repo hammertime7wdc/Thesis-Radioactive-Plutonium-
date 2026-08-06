@@ -14,6 +14,7 @@ from utils.utils import (
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
     SUCCESS, WARNING, ERROR
 )
+from services.analytics_service import fetch_analytics_summary
 
 # ── Chart colors ────────────────────────────────────────────────────
 GREEN = "#22c55e"
@@ -24,7 +25,7 @@ GRID_COLOR = "#e2e8f0"
 
 
 # ─────────────────────────────────────────────────────────────────
-# Stat card (Total Evaluations / Avg Similarity Score / Manual Overrides)
+# Stat card (Total Evaluations / Avg Similarity Score)
 # ─────────────────────────────────────────────────────────────────
 def build_stat_card(label, value, subtitle, value_color=TEXT_PRIMARY):
     return ft.Container(
@@ -120,10 +121,32 @@ def _legend_dot(label, color):
     )
 
 
+def _empty_chart_placeholder(title, message):
+    """Shown instead of a chart when there isn't enough real data yet
+    (e.g. no evaluations with criterion_scores populated so far)."""
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Text(title, size=16, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                ft.Container(height=40),
+                ft.Icon(ft.Icons.BAR_CHART_OUTLINED, size=32, color=TEXT_TERTIARY),
+                ft.Container(height=8),
+                ft.Text(message, size=12, color=TEXT_TERTIARY, text_align=ft.TextAlign.CENTER),
+                ft.Container(height=40),
+            ],
+            spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.padding.all(24),
+        bgcolor=CARD_BG_COLOR,
+        border_radius=12,
+        border=ft.border.all(1, BORDER_COLOR),
+        expand=True,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
-# Average Score by Criterion — Radar / Spider Chart (hand-drawn canvas)
-# Flet has no built-in radar chart control, so this draws the hexagon
-# web, axis spokes, and the data polygon using flet.canvas primitives.
+# Average Score by Criterion — Radar / Spider Chart
 # ─────────────────────────────────────────────────────────────────
 def build_radar_chart(labels, values, max_value=100, size=260):
     center = size / 2
@@ -290,21 +313,20 @@ def main(page: ft.Page, nav=None):
     page.bgcolor = BG_COLOR
     page.theme_mode = ft.ThemeMode.LIGHT
 
-    # ── Replace these with real values pulled from your evaluations store ──
-    total_evaluations = 81
-    evaluations_delta = "+12 this week"
-    avg_similarity_score = 0.68
-    manual_overrides = 2
-    manual_overrides_pct = "2.5% of evaluations"
+    # ── Real data, last 30 days ──
+    summary = fetch_analytics_summary(days=30)
 
-    fully_pct, partial_pct, irrelevant_pct = 62, 25, 13
+    total_evaluations = summary["total_evaluations"]
+    evaluations_delta = summary["evaluations_delta"]
+    avg_similarity_score = summary["avg_similarity_score"]
 
-    radar_labels = ["Content", "Organization", "Accuracy", "Terminology", "Constraint", "Logic", "Clarity"]
-    radar_values = [88, 79, 91, 84, 90, 76, 86]
+    fully_pct = summary["fully_pct"]
+    partial_pct = summary["partial_pct"]
+    irrelevant_pct = summary["irrelevant_pct"]
 
-    bar_categories = ["Content", "Organization", "Language", "Accuracy",
-                       "Key Concept", "Clarity", "Constraint", "Terminology"]
-    bar_values = [82, 71, 74, 90, 84, 76, 88, 79]
+    criterion_labels = summary["criterion_labels"]
+    criterion_values = summary["criterion_values"]
+    has_criterion_data = len(criterion_labels) >= 3  # radar needs >=3 axes to mean anything
 
     # Analytics header
     analytics_header = ft.Row(
@@ -321,26 +343,39 @@ def main(page: ft.Page, nav=None):
         [
             build_stat_card("Total Evaluations", total_evaluations, evaluations_delta, PRIMARY_BLUE),
             ft.Container(width=16),
-            build_stat_card("Avg. Similarity Score", f"{avg_similarity_score:.2f}",
-                             "Across all submissions", SUCCESS),
-            ft.Container(width=16),
-            build_stat_card("Manual Overrides", manual_overrides, manual_overrides_pct, ERROR),
+            build_stat_card("Avg. Similarity Score", f"{avg_similarity_score * 100:.1f}%",
+                            "Across all submissions", SUCCESS),
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
 
     # Pie chart + radar chart row
+    radar_section = (
+        build_radar_chart(criterion_labels, criterion_values)
+        if has_criterion_data
+        else _empty_chart_placeholder(
+            "Average Score by Criterion",
+            "Not enough evaluations with per-criterion scores yet.",
+        )
+    )
     charts_row = ft.Row(
         [
             build_pie_chart(fully_pct, partial_pct, irrelevant_pct),
             ft.Container(width=16),
-            build_radar_chart(radar_labels, radar_values),
+            radar_section,
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
 
     # Bar chart (full width)
-    bar_chart_section = build_bar_chart(bar_categories, bar_values)
+    bar_chart_section = (
+        build_bar_chart(criterion_labels, criterion_values)
+        if has_criterion_data
+        else _empty_chart_placeholder(
+            "Per-Criterion Average Scores",
+            "Not enough evaluations with per-criterion scores yet.",
+        )
+    )
 
     # Main content
     main_content = ft.Container(
