@@ -1,11 +1,13 @@
+-- ==========================================
 -- QualCheck Supabase Database Schema
--- Run this in your Supabase SQL Editor to set up the database
+-- ==========================================
 
--- Enable UUID extension
+-- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- 2. TABLES CREATION
 -- Profiles table
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
     email TEXT,
@@ -14,14 +16,17 @@ CREATE TABLE IF NOT EXISTS profiles (
     institution TEXT,
     bio TEXT,
     avatar_url TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    access_code TEXT,
+    access_code_expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Rubrics table
-CREATE TABLE IF NOT EXISTS rubrics (
+CREATE TABLE IF NOT EXISTS public.rubrics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     output_type TEXT NOT NULL CHECK (output_type IN ('short_answer', 'essay', 'code_report')),
     criteria JSONB NOT NULL,
@@ -31,21 +36,22 @@ CREATE TABLE IF NOT EXISTS rubrics (
 );
 
 -- Evaluations table
-CREATE TABLE IF NOT EXISTS evaluations (
+CREATE TABLE IF NOT EXISTS public.evaluations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     prompt TEXT NOT NULL,
-    rubric_id UUID REFERENCES rubrics(id) ON DELETE SET NULL,
+    rubric_id UUID REFERENCES public.rubrics(id) ON DELETE SET NULL,
     output_type TEXT NOT NULL CHECK (output_type IN ('short_answer', 'essay', 'code_report')),
     similarity_score DECIMAL(5, 4),
     classification TEXT,
     file_name TEXT,
     file_path TEXT,
+    criterion_scores JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Audit logs table
-CREATE TABLE IF NOT EXISTS audit_logs (
+CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     actor_email TEXT NOT NULL,
     action TEXT NOT NULL,
@@ -53,8 +59,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- User activities table for tracking user actions
-CREATE TABLE IF NOT EXISTS user_activities (
+-- User activities table
+CREATE TABLE IF NOT EXISTS public.user_activities (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     activity_type TEXT NOT NULL,
@@ -63,23 +69,37 @@ CREATE TABLE IF NOT EXISTS user_activities (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_evaluations_user_id ON evaluations(user_id);
-CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON evaluations(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_rubrics_user_id ON rubrics(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_email ON audit_logs(actor_email);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_activities_user_id ON user_activities(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_activities_created_at ON user_activities(created_at DESC);
+-- Password resets table
+CREATE TABLE IF NOT EXISTS public.password_resets (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    email TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Enable Row Level Security
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rubrics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
+-- 3. SCHEMA MIGRATIONS & COLUMN ENSURANCES (For existing DB compatibility)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_code TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_code_expires_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.evaluations ADD COLUMN IF NOT EXISTS criterion_scores JSONB;
 
--- Helper function to check if user is admin (bypasses RLS)
+UPDATE public.profiles
+SET is_active = TRUE
+WHERE is_active IS NULL;
+
+-- 4. INDEXES
+CREATE INDEX IF NOT EXISTS idx_evaluations_user_id ON public.evaluations(user_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON public.evaluations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evaluations_criterion_scores ON public.evaluations USING GIN (criterion_scores);
+CREATE INDEX IF NOT EXISTS idx_rubrics_user_id ON public.rubrics(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_email ON public.audit_logs(actor_email);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activities_user_id ON public.user_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_activities_created_at ON public.user_activities(created_at DESC);
+
+-- 5. HELPER FUNCTIONS
 CREATE OR REPLACE FUNCTION public.is_admin(user_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -90,95 +110,126 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- RLS Policies for profiles
--- Users can view and update their own profile
+-- 6. ROW LEVEL SECURITY (RLS) ENABLEMENT
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rubrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.password_resets ENABLE ROW LEVEL SECURITY;
+
+-- 7. RLS POLICIES
+
+-- Profiles
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
-    ON profiles FOR SELECT
+    ON public.profiles FOR SELECT
     USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
-    ON profiles FOR UPDATE
+    ON public.profiles FOR UPDATE
     USING (auth.uid() = id)
     WITH CHECK (auth.uid() = id);
 
--- Admins can view all profiles
+DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
 CREATE POLICY "Admins can view all profiles"
-    ON profiles FOR SELECT
+    ON public.profiles FOR SELECT
     USING (public.is_admin(auth.uid()));
 
--- RLS Policies for rubrics
--- Users can CRUD their own rubrics
+DROP POLICY IF EXISTS "Admins can update all profiles" ON public.profiles;
+CREATE POLICY "Admins can update all profiles"
+    ON public.profiles FOR UPDATE
+    USING (public.is_admin(auth.uid()))
+    WITH CHECK (public.is_admin(auth.uid()));
+
+-- Rubrics
+DROP POLICY IF EXISTS "Users can view own rubrics" ON public.rubrics;
 CREATE POLICY "Users can view own rubrics"
-    ON rubrics FOR SELECT
+    ON public.rubrics FOR SELECT
     USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can insert own rubrics" ON public.rubrics;
 CREATE POLICY "Users can insert own rubrics"
-    ON rubrics FOR INSERT
+    ON public.rubrics FOR INSERT
     WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update own rubrics" ON public.rubrics;
 CREATE POLICY "Users can update own rubrics"
-    ON rubrics FOR UPDATE
+    ON public.rubrics FOR UPDATE
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can delete own rubrics" ON public.rubrics;
 CREATE POLICY "Users can delete own rubrics"
-    ON rubrics FOR DELETE
+    ON public.rubrics FOR DELETE
     USING (user_id = auth.uid());
 
--- Admins can view all rubrics
+DROP POLICY IF EXISTS "Admins can view all rubrics" ON public.rubrics;
 CREATE POLICY "Admins can view all rubrics"
-    ON rubrics FOR SELECT
+    ON public.rubrics FOR SELECT
     USING (public.is_admin(auth.uid()));
 
--- RLS Policies for evaluations
--- Users can CRUD their own evaluations
+-- Evaluations
+DROP POLICY IF EXISTS "Users can view own evaluations" ON public.evaluations;
 CREATE POLICY "Users can view own evaluations"
-    ON evaluations FOR SELECT
+    ON public.evaluations FOR SELECT
     USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can insert own evaluations" ON public.evaluations;
 CREATE POLICY "Users can insert own evaluations"
-    ON evaluations FOR INSERT
+    ON public.evaluations FOR INSERT
     WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update own evaluations" ON public.evaluations;
 CREATE POLICY "Users can update own evaluations"
-    ON evaluations FOR UPDATE
+    ON public.evaluations FOR UPDATE
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can delete own evaluations" ON public.evaluations;
 CREATE POLICY "Users can delete own evaluations"
-    ON evaluations FOR DELETE
+    ON public.evaluations FOR DELETE
     USING (user_id = auth.uid());
 
--- Admins can view all evaluations
+DROP POLICY IF EXISTS "Admins can view all evaluations" ON public.evaluations;
 CREATE POLICY "Admins can view all evaluations"
-    ON evaluations FOR SELECT
+    ON public.evaluations FOR SELECT
     USING (public.is_admin(auth.uid()));
 
--- RLS Policies for audit_logs
--- Authenticated users can insert audit logs
+-- Audit Logs
+DROP POLICY IF EXISTS "Authenticated users can insert audit logs" ON public.audit_logs;
 CREATE POLICY "Authenticated users can insert audit logs"
-    ON audit_logs FOR INSERT
+    ON public.audit_logs FOR INSERT
     WITH CHECK (true);
 
--- Only admins can view audit logs
+DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 CREATE POLICY "Admins can view audit logs"
-    ON audit_logs FOR SELECT
+    ON public.audit_logs FOR SELECT
     USING (public.is_admin(auth.uid()));
 
--- RLS Policies for user_activities
--- Authenticated users can insert activities (user_id is set in code)
-DROP POLICY IF EXISTS "Users can insert own activities" ON user_activities;
+-- User Activities
+DROP POLICY IF EXISTS "Users can insert own activities" ON public.user_activities;
 CREATE POLICY "Users can insert own activities"
-    ON user_activities FOR INSERT
+    ON public.user_activities FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
 
--- Users can view their own activities
-DROP POLICY IF EXISTS "Users can view own activities" ON user_activities;
+DROP POLICY IF EXISTS "Users can view own activities" ON public.user_activities;
 CREATE POLICY "Users can view own activities"
-    ON user_activities FOR SELECT
+    ON public.user_activities FOR SELECT
     USING (auth.uid() = user_id);
 
--- Function to automatically create profile on user signup
+-- Password Resets
+DROP POLICY IF EXISTS "Service role manages password resets" ON public.password_resets;
+CREATE POLICY "Service role manages password resets"
+    ON public.password_resets
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+-- 8. TRIGGERS & AUTOMATION
+
+-- Handle new user creation trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -195,13 +246,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger to call the function on new user signup
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Function to update updated_at timestamp
+-- Automatic timestamp updater trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -210,9 +260,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers for updated_at
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at 
+    BEFORE UPDATE ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_rubrics_updated_at BEFORE UPDATE ON rubrics
+DROP TRIGGER IF EXISTS update_rubrics_updated_at ON public.rubrics;
+CREATE TRIGGER update_rubrics_updated_at 
+    BEFORE UPDATE ON public.rubrics
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
