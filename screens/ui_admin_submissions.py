@@ -13,6 +13,7 @@ from utils.utils import (
     SUCCESS, WARNING, ERROR
 )
 from services.submissions_services import fetch_submissions
+from services.csv_service import export_submissions_to_csv
 
 
 def main(page: ft.Page, nav=None):
@@ -65,7 +66,7 @@ def main(page: ft.Page, nav=None):
     else:
         admin_header = None
 
-    # --- Submissions data (real — fetched from Supabase) ---
+    # --- Submissions data ---
     SUBMISSIONS_DATA = fetch_submissions()
 
     # --- Classification Badge Helpers ---
@@ -133,9 +134,12 @@ def main(page: ft.Page, nav=None):
                 return False
         return True
 
+    def get_filtered_data():
+        return [item for item in SUBMISSIONS_DATA if matches(item, search_state["query"], search_state["classification"])]
+
     def rebuild_rows(e=None):
         style_filter_pills()
-        filtered = [item for item in SUBMISSIONS_DATA if matches(item, search_state["query"], search_state["classification"])]
+        filtered = get_filtered_data()
         submissions_table.rows = [build_row(item) for item in filtered] if filtered else empty_row()
         page.update()
 
@@ -182,8 +186,59 @@ def main(page: ft.Page, nav=None):
 
     style_filter_pills()
 
+    # --- Filter Container (Hidden by default so it doesn't stay open) ---
+    pills_container = ft.Row(
+        [
+            pills["all"],
+            ft.Container(width=4),
+            pills["Fully Relevant"],
+            ft.Container(width=4),
+            pills["Partially Relevant"],
+            ft.Container(width=4),
+            pills["Irrelevant"],
+        ],
+        visible=False,  # Hidden by default
+        animate_opacity=200,
+    )
+
+    def toggle_filter_visibility(e):
+        pills_container.visible = not pills_container.visible
+        filter_btn.icon_color = PRIMARY_BLUE if pills_container.visible else TEXT_TERTIARY
+        page.update()
+
+    filter_btn = ft.IconButton(
+        icon=ft.Icons.FILTER_LIST,
+        icon_color=TEXT_TERTIARY,
+        icon_size=22,
+        tooltip="Toggle Filters",
+        on_click=toggle_filter_visibility,
+    )
+
+    # --- CSV Export Logic ---
+    def on_csv_result(e: ft.FilePickerResultEvent):
+        if e.path:
+            current_data = get_filtered_data()
+            success = export_submissions_to_csv(current_data, e.path)
+            
+            snack_message = "CSV exported successfully!" if success else "Failed to export CSV."
+            snack_color = SUCCESS if success else ERROR
+            
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text(snack_message, color=TEXT_WHITE),
+                bgcolor=snack_color,
+            )
+            page.snack_bar.open = True
+            page.update()
+
+    file_picker = ft.FilePicker(on_result=on_csv_result)
+    page.overlay.append(file_picker)
+
     def on_export_csv(e):
-        print("Export CSV clicked")
+        file_picker.save_file(
+            dialog_title="Export Submissions to CSV",
+            file_name="submissions_export.csv",
+            allowed_extensions=["csv"],
+        )
 
     export_btn = ft.Container(
         content=ft.Row(
@@ -203,32 +258,18 @@ def main(page: ft.Page, nav=None):
         ink=True,
     )
 
-    filter_pills_row = ft.Row(
-        [
-            ft.Icon(ft.Icons.FILTER_LIST, size=20, color=TEXT_TERTIARY),
-            ft.Container(width=4),
-            pills["all"],
-            ft.Container(width=4),
-            pills["Fully Relevant"],
-            ft.Container(width=4),
-            pills["Partially Relevant"],
-            ft.Container(width=4),
-            pills["Irrelevant"],
-        ],
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        spacing=0,
-    )
-
     filter_section = ft.Container(
         content=ft.Row(
             [
                 search_bar,
-                ft.Container(width=16),
-                filter_pills_row,
-                ft.Container(width=16),
+                ft.Container(width=12),
+                filter_btn,
+                pills_container,
+                ft.Container(width=12),
                 export_btn,
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.padding.symmetric(horizontal=24, vertical=16),
     )
