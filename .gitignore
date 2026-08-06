@@ -24,3 +24,11 @@ supabase_storage_setup.sql
 test.py
 withcase/
 *.ipynb
+@'
+essay_qualcheck/
+gen2_qualcheck_short_answers/
+gen3.5legacy_qualcheck_short_answers/
+gen3legacy_qualcheck_short_answers/
+legacy_essay_qualcheck/
+legacy_qualcheck_short_answers/
+qualcheck_short_answers/
