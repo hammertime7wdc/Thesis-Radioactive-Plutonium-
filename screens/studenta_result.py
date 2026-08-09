@@ -97,10 +97,6 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
             else:
                 nav.navigate_to_short_answer()
 
-    def go_new_evaluation(e):
-        if nav and hasattr(nav, "navigate_to_new_evaluation"):
-            nav.navigate_to_new_evaluation()
-
     header = ft.Container(
         content=ft.Row(
             [
@@ -127,35 +123,6 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
                         ),
                     ],
                     spacing=0,
-                ),
-                ft.Row(
-                    [
-                        ft.OutlinedButton(
-                            content=ft.Row(
-                                [ft.Icon(ft.Icons.DOWNLOAD_OUTLINED, size=16, color=BUTTON_SECONDARY_TEXT),
-                                 ft.Text("Export CSV", color=BUTTON_SECONDARY_TEXT, size=13)],
-                                spacing=6,
-                                tight=True,
-                            ),
-                            style=ft.ButtonStyle(
-                                bgcolor=BUTTON_SECONDARY_BG,
-                                side=ft.BorderSide(1, BUTTON_SECONDARY_BORDER),
-                                shape=ft.RoundedRectangleBorder(radius=8),
-                            ),
-                        ),
-                        ft.ElevatedButton(
-                            content=ft.Row(
-                                [ft.Icon(ft.Icons.ADD, size=16, color=BUTTON_PRIMARY_TEXT),
-                                 ft.Text("New Evaluation", color=BUTTON_PRIMARY_TEXT, size=13)],
-                                spacing=6,
-                                tight=True,
-                            ),
-                            bgcolor=BUTTON_PRIMARY_BG,
-                            on_click=go_new_evaluation,
-                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                        ),
-                    ],
-                    spacing=10,
                 ),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
