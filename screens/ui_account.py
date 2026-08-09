@@ -247,6 +247,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             return
         if state["is_admin"] and hasattr(nav, "navigate_to_admin"):
             nav.navigate_to_admin()
+        elif hasattr(nav, "navigate_to_new_evaluation"):
+            nav.navigate_to_new_evaluation()
         elif hasattr(nav, "navigate_to_short_answer"):
             nav.navigate_to_short_answer()
 
@@ -852,7 +854,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
     def back_button():
         return ft.TextButton(
-            "Back to admin" if state["is_admin"] else "Back to dashboard",
+            "Back to admin" if state["is_admin"] else "Back to evaluation selection",
             icon=ft.Icons.ARROW_BACK,
             style=ft.ButtonStyle(color=TEXT_SECONDARY, padding=ft.padding.all(0)),
             on_click=go_back,

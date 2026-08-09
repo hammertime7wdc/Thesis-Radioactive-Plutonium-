@@ -92,7 +92,10 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
     # -----------------------------------------------------------------
     def go_back(e):
         if nav:
-            nav.navigate_to_dashboard()
+            if hasattr(nav, "navigate_to_new_evaluation"):
+                nav.navigate_to_new_evaluation()
+            else:
+                nav.navigate_to_short_answer()
 
     def go_new_evaluation(e):
         if nav and hasattr(nav, "navigate_to_new_evaluation"):
@@ -109,7 +112,7 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
                                     icon=ft.Icons.ARROW_BACK,
                                     icon_color=TEXT_PRIMARY,
                                     on_click=go_back,
-                                    tooltip="Back to Dashboard",
+                                    tooltip="Back to Evaluation Selection",
                                 ),
                                 ft.Text("Evaluation Results", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                             ],

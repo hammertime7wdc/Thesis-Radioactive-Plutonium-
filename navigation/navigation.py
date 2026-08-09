@@ -445,6 +445,11 @@ class Navigation:
         self.current_view = "dashboard"
         self._swap_evaluator_content(lambda: dashboard_main(self.page, self, role="evaluator"))
 
+    def navigate_to_new_evaluation(self):
+        """Navigate to the evaluation selection screen"""
+        self.current_view = "evaluation"
+        self._swap_evaluator_content(lambda: short_answer_main(self.page, self))
+
     def navigate_to_account(self):
         """Navigate to evaluator account settings"""
         self._transition_id += 1
