@@ -812,6 +812,7 @@ def main(page: ft.Page, nav=None):
                 ),
             ],
             expand=True,
+            clip_behavior=ft.ClipBehavior.NONE,
         ),
         expand=True,
         opacity=0,
