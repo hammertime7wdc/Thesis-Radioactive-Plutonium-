@@ -24,18 +24,22 @@ def fetch_users_with_evaluations() -> list[dict]:
         print(f"Error fetching users: {e}")
         return []
 
+    # Single query for all evaluation user_ids, then count client-side.
+    # Avoids N+1 round trips (one count query per user) that the previous
+    # implementation made.
+    counts_by_user: dict[str, int] = {}
+    try:
+        supabase = get_supabase_client()
+        evals_response = supabase.table("evaluations").select("user_id").execute()
+        for row in (evals_response.data or []):
+            uid = row.get("user_id")
+            if uid:
+                counts_by_user[uid] = counts_by_user.get(uid, 0) + 1
+    except Exception as e:
+        print(f"Error fetching evaluation counts: {e}")
+
     for user in users_data:
-        try:
-            supabase = get_supabase_client()
-            eval_response = (
-                supabase.table("evaluations")
-                .select("id", count="exact")
-                .eq("user_id", user["id"])
-                .execute()
-            )
-            user["evaluations_count"] = eval_response.count if eval_response.count else 0
-        except Exception:
-            user["evaluations_count"] = 0
+        user["evaluations_count"] = counts_by_user.get(user["id"], 0)
 
     # Default is_active for rows created before the column existed
     for user in users_data:
