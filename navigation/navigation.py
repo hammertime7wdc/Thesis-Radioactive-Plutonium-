@@ -453,15 +453,8 @@ class Navigation:
     def navigate_to_account(self):
         """Navigate to evaluator account settings"""
         self._transition_id += 1
-        
-        # Smooth fade out before changing the screen
-        if self.page.controls:
-            for c in self.page.controls:
-                c.animate_opacity = ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
-                c.opacity = 0
-            self.page.update()
-            time.sleep(0.2)
-            
+        self.current_view = "account"
+
         self.page.clean()
         self.page.appbar = None
         self.page.window_width = 1500
@@ -469,12 +462,11 @@ class Navigation:
         self.page.padding = 0
         self.page.bgcolor = "#f8fafc"
         self.page.theme_mode = ft.ThemeMode.LIGHT
+        self.page.scroll = ft.ScrollMode.AUTO
         self.is_evaluation_mode = False
         self.app_bar = None
         self._content_wrapper = None
-        # Load content first, then update once so user never sees empty page
         account_main(self.page, self, role="evaluator")
-        # Account screen sets nav.main_content; add it to page
         if self.main_content and self.main_content not in self.page.controls:
             self.page.add(self.main_content)
         self.page.update()
