@@ -293,11 +293,28 @@ def main(page: ft.Page, nav=None):
     def render_selected_files():
         selected_files_list.controls.clear()
         for f in selected_files:
+            def make_remove_handler(target=f):
+                def remove_file(e):
+                    if target in selected_files:
+                        selected_files.remove(target)
+                    render_selected_files()
+                    update_evaluate_button_state()
+                    selected_files_list.update()
+                    page.update()
+                return remove_file
+
             selected_files_list.controls.append(
                 ft.Row(
                     [
                         ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=14, color=TEXT_SECONDARY),
-                        ft.Text(f["name"], size=12, color=TEXT_PRIMARY),
+                        ft.Text(f["name"], size=12, color=TEXT_PRIMARY, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_size=14,
+                            icon_color=TEXT_SECONDARY,
+                            tooltip="Remove file",
+                            on_click=make_remove_handler(),
+                        ),
                     ],
                     spacing=6,
                 )
