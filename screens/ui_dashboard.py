@@ -199,7 +199,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     dashboard_evaluations = _merge_evaluations(live_evaluations, evaluations)
     stats = _compute_stats(dashboard_evaluations)
     output_types = _compute_output_type_breakdown(dashboard_evaluations)
-    recent_evaluations = dashboard_evaluations[:10]
 
     # ------------------------------------------------------------------
     # Header
@@ -342,16 +341,15 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     )
 
     # ------------------------------------------------------------------
-    # Recent Evaluations section
+    # Recent Evaluations section (scrollable + searchable)
     # ------------------------------------------------------------------
-    def empty_state():
+    def empty_state(msg="No evaluations yet. Create your first evaluation to see results here."):
         return ft.Container(
             content=ft.Column(
                 [
                     ft.Image(src="https://img.icons8.com/fluency/48/000000/bar-chart.png", width=48, height=48),
                     ft.Container(height=12),
-                    ft.Text("No evaluations yet. Create your first evaluation to see results here.",
-                            size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
+                    ft.Text(msg, size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
                 ],
                 spacing=0,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -412,22 +410,114 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             padding=ft.padding.symmetric(vertical=10),
         )
 
-    if recent_evaluations:
-        rows = []
-        for i, ev in enumerate(recent_evaluations):
-            rows.append(recent_evaluation_row(ev))
-            if i < len(recent_evaluations) - 1:
-                rows.append(ft.Divider(height=1, color=BORDER_COLOR))
-        recent_content = ft.Column(rows, spacing=0)
-    else:
-        recent_content = empty_state()
+    # --- Search + filter state (same pattern as ui_admin_submissions.py) ---
+    history_state = {"query": "", "classification": "all"}
+
+    def matches_history(evaluation, query, classification):
+        if classification != "all" and evaluation.get("classification") != classification:
+            return False
+        if query:
+            title = evaluation.get("file_name") or evaluation.get("name") or ""
+            prompt = evaluation.get("prompt") or ""
+            output_label = OUTPUT_TYPE_LABELS.get(evaluation.get("output_type"), "")
+            haystack = f"{title} {prompt} {output_label}".lower()
+            if query.lower() not in haystack:
+                return False
+        return True
+
+    def get_filtered_history():
+        return [
+            ev for ev in dashboard_evaluations
+            if matches_history(ev, history_state["query"], history_state["classification"])
+        ]
+
+    history_list = ft.ListView(spacing=0, height=380, auto_scroll=False)
+
+    def rebuild_history(e=None):
+        style_history_pills()
+        filtered = get_filtered_history()
+        if filtered:
+            rows = []
+            for i, ev in enumerate(filtered):
+                rows.append(recent_evaluation_row(ev))
+                if i < len(filtered) - 1:
+                    rows.append(ft.Divider(height=1, color=BORDER_COLOR))
+            history_list.controls = rows
+        else:
+            no_match_msg = (
+                "No evaluations match your search."
+                if (history_state["query"] or history_state["classification"] != "all")
+                else "No evaluations yet. Create your first evaluation to see results here."
+            )
+            history_list.controls = [empty_state(no_match_msg)]
+        page.update()
+
+    history_search_bar = ft.TextField(
+        hint_text="Search by file name, prompt, or type…",
+        prefix_icon=ft.Icons.SEARCH,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
+        bgcolor=INPUT_BG,
+        border_radius=8,
+        height=42,
+        text_size=13,
+        content_padding=ft.padding.symmetric(horizontal=14, vertical=8),
+        hint_style=ft.TextStyle(color=INPUT_HINT, size=13),
+        expand=True,
+        on_change=lambda e: (history_state.update({"query": e.control.value or ""}), rebuild_history()),
+    )
+
+    HISTORY_FILTERS = [
+        ("all", "All"),
+        ("Fully Relevant", "Fully Relevant"),
+        ("Partially Relevant", "Partially Relevant"),
+        ("Irrelevant", "Irrelevant"),
+    ]
+
+    def make_history_pill(key, label):
+        def on_click(e):
+            history_state["classification"] = key
+            rebuild_history()
+
+        return ft.Container(
+            content=ft.Text(label, size=12, weight=ft.FontWeight.W_600),
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            border_radius=14,
+            ink=True,
+            on_click=on_click,
+        )
+
+    history_pills = {key: make_history_pill(key, label) for key, label in HISTORY_FILTERS}
+
+    def style_history_pills():
+        for key, pill in history_pills.items():
+            selected = history_state["classification"] == key
+            pill.bgcolor = PRIMARY_BLUE if selected else None
+            pill.content.color = TEXT_WHITE if selected else TEXT_TERTIARY
+
+    style_history_pills()
+
+    history_filter_row = ft.Row(
+        [history_pills[key] for key, _ in HISTORY_FILTERS],
+        spacing=4,
+    )
 
     recent_evaluations_section = ft.Container(
         content=ft.Column(
             [
-                ft.Text("Recent Evaluations", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                ft.Row(
+                    [
+                        ft.Text("Recent Evaluations", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                        ft.Text(f"{len(dashboard_evaluations)} total", size=12, color=TEXT_TERTIARY),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
                 ft.Container(height=16),
-                recent_content,
+                history_search_bar,
+                ft.Container(height=10),
+                history_filter_row,
+                ft.Container(height=16),
+                history_list,
             ],
             spacing=0,
         ),
@@ -436,6 +526,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         border_radius=12,
         border=ft.border.all(1, BORDER_COLOR),
     )
+
+    rebuild_history()
 
     # ------------------------------------------------------------------
     # Assemble page
