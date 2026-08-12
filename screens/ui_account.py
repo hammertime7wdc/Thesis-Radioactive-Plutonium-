@@ -77,7 +77,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         "display_avatar_url": "",
         "evaluations_count": 0,
         "member_since": "Loading...",
-        "member_since": "Loading...",
         "activities": []
     }
 
