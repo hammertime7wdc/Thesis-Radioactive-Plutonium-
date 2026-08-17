@@ -295,13 +295,20 @@ def main(page: ft.Page, nav=None):
         rows=[build_row(item) for item in SUBMISSIONS_DATA] if SUBMISSIONS_DATA else empty_row(),
     )
 
+    table_scroll_view = ft.ListView(
+        controls=[submissions_table],
+        spacing=0,
+        height=420,
+        auto_scroll=False,
+    )
+
     # --- Submissions Card container ---
     submissions_section = ft.Container(
         content=ft.Column(
             [
                 filter_section,
                 ft.Container(
-                    content=submissions_table,
+                    content=table_scroll_view,
                     padding=ft.padding.symmetric(horizontal=24, vertical=0),
                 ),
             ],
