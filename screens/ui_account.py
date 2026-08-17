@@ -258,6 +258,31 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             print(f"Activity refresh error: {ex}")
             state["activities"] = []
 
+    def set_profile_save_button_loading(is_loading: bool):
+        if not hasattr(profile_page_state, "save_button") or profile_page_state["save_button"] is None:
+            return
+        button = profile_page_state["save_button"]
+        if is_loading:
+            button.content = ft.Row(
+                [
+                    ft.ProgressRing(width=14, height=14, stroke_width=2, color=BUTTON_PRIMARY_TEXT),
+                    ft.Text("Saving...", size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            )
+        else:
+            button.content = ft.Row(
+                [
+                    ft.Text("Save Changes", size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=0,
+            )
+        page.update()
+
+    profile_page_state = {"save_button": None}
+
     def update_profile(e):
         # Get values from form fields (direct TextField references)
         new_name = name_field_ref.value if name_field_ref else state["display_name"]
@@ -265,6 +290,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         new_department = department_field_ref.value if department_field_ref else state["display_department"]
         new_institution = institution_field_ref.value if institution_field_ref else state["display_institution"]
         new_bio = bio_field_ref.value if bio_field_ref else state["display_bio"]
+        set_profile_save_button_loading(True)
         
         try:
             supabase = get_supabase_client()
@@ -295,8 +321,10 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             profile_message.value = "Profile changes saved."
             profile_message.visible = True
             profile_message.color = SUCCESS
+            set_profile_save_button_loading(False)
             page.update()
         except Exception as ex:
+            set_profile_save_button_loading(False)
             profile_message.value = f"Error saving profile: {str(ex)}"
             profile_message.visible = True
             profile_message.color = ft.Colors.RED_500
@@ -353,6 +381,30 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             page.update()
 
     # ── Step 1: verify current password + validate new password, then email a code ──
+    def set_security_button_loading(is_loading: bool, label: str, button_ref):
+        if button_ref is None:
+            return
+        if is_loading:
+            button_ref.content = ft.Row(
+                [
+                    ft.ProgressRing(width=14, height=14, stroke_width=2, color=BUTTON_PRIMARY_TEXT),
+                    ft.Text(label, size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            )
+        else:
+            button_ref.content = ft.Row(
+                [
+                    ft.Text(label, size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=0,
+            )
+        page.update()
+
+    security_button_state = {"send_reset": None, "update_password": None}
+
     def send_verification_code(e):
         security_message.visible = False
 
@@ -369,12 +421,17 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             page.update()
             return
 
+        if security_button_state["send_reset"] is not None:
+            set_security_button_loading(True, "Sending code...", security_button_state["send_reset"])
+
         from database.auth import validate_password as validate_account_password
         is_valid, password_error = validate_account_password(new_password.value)
         if not is_valid:
             security_message.value = password_error
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
+            if security_button_state["send_reset"] is not None:
+                set_security_button_loading(False, "Send Reset Code", security_button_state["send_reset"])
             page.update()
             return
 
@@ -382,6 +439,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             security_message.value = "Current password is incorrect."
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
+            if security_button_state["send_reset"] is not None:
+                set_security_button_loading(False, "Send Reset Code", security_button_state["send_reset"])
             page.update()
             return
 
@@ -397,6 +456,8 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             security_message.value = resp
             security_message.color = ft.Colors.RED_500
             security_message.visible = True
+        if security_button_state["send_reset"] is not None:
+            set_security_button_loading(False, "Send Reset Code", security_button_state["send_reset"])
         page.update()
 
     # ── Step 2: verify the emailed code, then finalize the password change ──
@@ -418,6 +479,9 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             page.update()
             return
 
+        if security_button_state["update_password"] is not None:
+            set_security_button_loading(True, "Updating...", security_button_state["update_password"])
+
         ok, msg = reset_password_with_token(code_field.value, password_to_set)
         if ok:
             security_message.value = "Password updated successfully."
@@ -435,8 +499,15 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         else:
             security_message.value = msg
             security_message.color = ft.Colors.RED_500
+        if security_button_state["update_password"] is not None:
+            set_security_button_loading(False, "Update Password", security_button_state["update_password"])
         security_message.visible = True
         page.update()
+
+    current_password.on_submit = send_verification_code
+    new_password.on_submit = send_verification_code
+    confirm_password.on_submit = send_verification_code
+    code_field.on_submit = verify_and_update
 
     def back_to_password_form(e):
         security_step["value"] = "form"
@@ -624,6 +695,26 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             text_size=13,
             content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
         )
+        name_field_ref.on_submit = update_profile
+        email_field_ref.on_submit = update_profile
+        department_field_ref.on_submit = update_profile
+        institution_field_ref.on_submit = update_profile
+        bio_field_ref.on_submit = update_profile
+
+        save_btn = ft.ElevatedButton(
+            content=ft.Row(
+                [ft.Text("Save Changes", size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT)],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=0,
+            ),
+            width=130,
+            height=38,
+            bgcolor=BUTTON_PRIMARY_BG,
+            color=BUTTON_PRIMARY_TEXT,
+            style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
+            on_click=update_profile,
+        )
+        profile_page_state["save_button"] = save_btn
 
         return ft.Column(
             [
@@ -670,18 +761,10 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 ], spacing=0),
                 ft.Container(height=14),
                 upload_progress,
-                ft.Container(height=6),
+                ft.Container(height=8),
                 ft.Row([
                     ft.Container(expand=True),
-                    ft.ElevatedButton(
-                        "Save Changes",
-                        width=130,
-                        height=38,
-                        bgcolor=BUTTON_PRIMARY_BG,
-                        color=BUTTON_PRIMARY_TEXT,
-                        style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
-                        on_click=update_profile,
-                    ),
+                    save_btn,
                 ]),
                 ft.Container(height=6),
                 profile_message,
@@ -693,6 +776,20 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
     def security_view():
         if security_step["value"] == "form":
+            send_reset_btn = ft.ElevatedButton(
+                content=ft.Row(
+                    [ft.Text("Send Reset Code", size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT)],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=0,
+                ),
+                width=180,
+                height=42,
+                bgcolor=BUTTON_PRIMARY_BG,
+                color=BUTTON_PRIMARY_TEXT,
+                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
+                on_click=send_verification_code,
+            )
+            security_button_state["send_reset"] = send_reset_btn
             return ft.Column(
                 [
                     ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
@@ -720,21 +817,27 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                     ft.Row(
                         [
                             ft.Container(expand=True),
-                            ft.ElevatedButton(
-                                "Send Reset Code",
-                                width=180,
-                                height=42,
-                                bgcolor=BUTTON_PRIMARY_BG,
-                                color=BUTTON_PRIMARY_TEXT,
-                                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
-                                on_click=send_verification_code,
-                            ),
+                            send_reset_btn,
                         ]
                     ),
                 ],
                 spacing=0,
             )
         else:
+            update_password_btn = ft.ElevatedButton(
+                content=ft.Row(
+                    [ft.Text("Update Password", size=12, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT)],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=0,
+                ),
+                width=160,
+                height=42,
+                bgcolor=BUTTON_PRIMARY_BG,
+                color=BUTTON_PRIMARY_TEXT,
+                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
+                on_click=verify_and_update,
+            )
+            security_button_state["update_password"] = update_password_btn
             return ft.Column(
                 [
                     ft.Text("Change Password", size=15, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
@@ -759,15 +862,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                                 on_click=back_to_password_form,
                             ),
                             ft.Container(expand=True),
-                            ft.ElevatedButton(
-                                "Update Password",
-                                width=160,
-                                height=42,
-                                bgcolor=BUTTON_PRIMARY_BG,
-                                color=BUTTON_PRIMARY_TEXT,
-                                style=ft.ButtonStyle(elevation=0, shadow_color=ft.Colors.TRANSPARENT),
-                                on_click=verify_and_update,
-                            ),
+                            update_password_btn,
                         ]
                     ),
                 ],

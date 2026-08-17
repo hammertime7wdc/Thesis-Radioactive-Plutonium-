@@ -409,6 +409,8 @@ def build_sign_in_container(page: ft.Page, nav=None, on_go_to_create_account=Non
         threading.Thread(target=login_thread, daemon=True).start()
 
     sign_in_btn.on_click = on_login
+    si_email.on_submit = on_login
+    si_password.on_submit = on_login
 
     def _google_button_content(label):
         return ft.Row(

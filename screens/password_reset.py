@@ -113,6 +113,23 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         visible=False,
     )
 
+    def make_loading_btn(label):
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.ProgressRing(width=16, height=16, stroke_width=2, color=ft.Colors.WHITE),
+                    ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            width=400,
+            height=46,
+            bgcolor=ft.Colors.BLUE_600,
+            border_radius=8,
+            alignment=ft.alignment.center,
+        )
+
     def on_send_reset(e):
         if not email_field.value:
             message.value = "Please enter your email address."
@@ -120,6 +137,9 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             message.visible = True
             page.update()
             return
+
+        action_btn.content = make_loading_btn("Sending code...")
+        page.update()
 
         success, resp = send_password_reset_email(email_field.value)
         if success:
@@ -129,6 +149,7 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             message.value = "Verification code sent to your email."
             message.color = ft.Colors.GREEN_400
         else:
+            action_btn.content = make_send_btn()
             message.value = resp
             message.color = ft.Colors.RED_400
         message.visible = True
@@ -157,6 +178,9 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             page.update()
             return
 
+        action_btn.content = make_loading_btn("Verifying...")
+        page.update()
+
         ok, msg = reset_password_with_token(code_field.value, new_password.value)
         if ok:
             message.value = "Password reset successfully! You can now sign in."
@@ -169,10 +193,16 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             confirm_field.value = ""
             code_field.value = ""
         else:
+            action_btn.content = make_verify_btn()
             message.value = msg
             message.color = ft.Colors.RED_400
         message.visible = True
         page.update()
+
+    email_field.on_submit = on_send_reset
+    code_field.on_submit = on_verify
+    new_password.on_submit = on_verify
+    confirm_field.on_submit = on_verify
 
     def make_send_btn():
         return ft.Container(

@@ -298,6 +298,12 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
             threading.Thread(target=create_account_thread, daemon=True).start()
 
+    ca_fullname.on_submit = on_create_account
+    ca_email.on_submit = on_create_account
+    ca_password.on_submit = on_create_account
+    ca_confirm.on_submit = on_create_account
+    ca_code_field.on_submit = on_create_account
+
     def _google_button_content(label):
         return ft.Row(
             [
