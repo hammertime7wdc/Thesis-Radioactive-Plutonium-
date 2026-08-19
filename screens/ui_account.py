@@ -10,9 +10,15 @@ from services.activity_logger import log_activity, get_recent_activities
 from services.avatar_service import upload_avatar_image
 
 try:
-    from database.auth import send_password_reset_email, reset_password_with_token
+    from database.auth import (
+        resend_password_reset_email,
+        send_password_reset_email,
+        reset_password_with_token,
+    )
 except ModuleNotFoundError:
     def send_password_reset_email(email: str):
+        return False, "Database not available"
+    def resend_password_reset_email(email: str):
         return False, "Database not available"
     def reset_password_with_token(token: str, new_password: str):
         return False, "Database not available"
@@ -41,6 +47,7 @@ from utils.utils import (
     INPUT_HINT,
     SUCCESS,
 )
+from utils.resend_control import build_resend_code_control
 
 
 def main(page: ft.Page, nav=None, role="evaluator"):
@@ -220,15 +227,19 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     new_password = _security_field("Min. 8 chars: 1 lowercase, 1 uppercase, 1 number, 1 special", password=True)
     confirm_password = _security_field("Confirm new password", password=True)
     code_field = ft.TextField(
-        hint_text="Enter the 6-digit code sent to your email",
+        hint_text="• • • • • •",
         width=520,
-        height=42,
+        height=48,
         border_radius=8,
         bgcolor=INPUT_BG,
         border_color=INPUT_BORDER,
         focused_border_color=PRIMARY_BLUE,
-        text_size=13,
-        content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        text_size=16,
+        text_align=ft.TextAlign.CENTER,
+        content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
+        hint_style=ft.TextStyle(color=INPUT_HINT, letter_spacing=4),
+        max_length=6,
+        input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]"),
     )
     security_message = ft.Text("", size=12, color=SUCCESS, visible=False)
 
@@ -470,6 +481,12 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             security_message.visible = True
             page.update()
             return
+        if len(code_field.value.strip()) != 6:
+            security_message.value = "Please enter the 6-digit verification code."
+            security_message.color = ft.Colors.RED_500
+            security_message.visible = True
+            page.update()
+            return
 
         password_to_set = pending_new_password["value"] or new_password.value
         if not password_to_set:
@@ -508,6 +525,29 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     new_password.on_submit = send_verification_code
     confirm_password.on_submit = send_verification_code
     code_field.on_submit = verify_and_update
+
+    resend_processing = {"value": False}
+
+    def resend_verification_code(e):
+        if resend_processing["value"]:
+            return
+        resend_processing["value"] = True
+        security_message.visible = False
+        page.update()
+
+        try:
+            success, resp = resend_password_reset_email(reset_email_field.value or user_email)
+            if success:
+                security_message.value = "A new code was sent to your email."
+                security_message.color = SUCCESS
+                code_field.value = ""
+            else:
+                security_message.value = resp
+                security_message.color = ft.Colors.RED_500
+            security_message.visible = True
+        finally:
+            resend_processing["value"] = False
+            page.update()
 
     def back_to_password_form(e):
         security_step["value"] = "form"
@@ -851,6 +891,16 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                     ft.Text("Verification Code", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
                     ft.Container(height=4),
                     code_field,
+                    ft.Container(height=8),
+                    ft.Container(
+                        content=build_resend_code_control(
+                            on_click=resend_verification_code,
+                            label_color=TEXT_SECONDARY,
+                            action_color=PRIMARY_BLUE,
+                        ),
+                        width=520,
+                        alignment=ft.alignment.center_left,
+                    ),
                     ft.Container(height=16),
                     security_message,
                     ft.Container(height=8),

@@ -27,13 +27,15 @@ def send_signup_verification(
     Raises Exception with a user-facing message on failure.
     """
     email_service = get_email_service()
-    email_service.send_welcome_email(
+    sent = email_service.send_welcome_email(
         to_email=email,
         user_name=full_name,
         temporary_password=temp_password,
         login_url=login_url,
         access_code=access_code,
     )
+    if not sent:
+        raise RuntimeError("Failed to send verification email")
 
 
 def complete_registration(
@@ -41,7 +43,7 @@ def complete_registration(
     password: str,
     full_name: str,
     access_code: str,
-    code_expiry_minutes: int = 30,
+    code_expiry_minutes: int = 5,
 ) -> str:
     """
     Creates the Supabase auth user (via the service role client) and
@@ -54,6 +56,8 @@ def complete_registration(
     auth_response = supabase_admin.auth.admin.create_user(
         {"email": email, "password": password, "email_confirm": True}
     )
+    if not auth_response or not auth_response.user:
+        raise RuntimeError("Supabase did not return a newly created user")
     user_id = auth_response.user.id
 
     profile_payload = {

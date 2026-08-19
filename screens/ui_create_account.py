@@ -14,6 +14,7 @@ from services.registration import (
     send_signup_verification,
     complete_registration,
 )
+from utils.resend_control import build_resend_code_control
 
 try:
     from database.auth import validate_password
@@ -174,8 +175,28 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         hint="Min. 8 chars: 1 uppercase, 1 number, 1 special", password=True, reveal=True
     )
     ca_confirm = text_field(password=True, reveal=True)
-    ca_code_field = text_field(
-        hint="Enter the 6-digit code sent to your email", read_only=False, value=""
+    ca_code_field = ft.TextField(
+        hint_text="• • • • • •",
+        width=400,
+        height=44,
+        bgcolor="#1e2f46",
+        border_color="#2e4060",
+        focused_border_color=ft.Colors.BLUE_400,
+        text_size=14,
+        text_align=ft.TextAlign.CENTER,
+        content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
+        hint_style=ft.TextStyle(color="#4a5b75"),
+        color=ft.Colors.WHITE,
+        border_radius=8,
+        max_length=6,
+        input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]"),
+    )
+
+    verify_email_text = ft.Text(
+        "",
+        size=13,
+        color="#8b9bb4",
+        text_align=ft.TextAlign.CENTER,
     )
 
     class SignupState:
@@ -230,10 +251,24 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         access_code=signup_state.access_code,
                     )
                     signup_state.step = 2
+                    verify_email_text.spans = [
+                        ft.TextSpan("We sent a 6-digit code to\n"),
+                        ft.TextSpan(
+                            ca_email.value,
+                            ft.TextStyle(weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ),
+                    ]
+                    ca_step1_header.visible = False
                     ca_step1.visible = False
+                    google_btn_signup.visible = False
+                    ca_or_divider.visible = False
+                    ca_bottom_row.visible = False
+                    ca_back_link.visible = True
+                    ca_step2_header.visible = True
                     ca_step2.visible = True
+                    ca_resend_row.visible = True
                     ca_action_button_container.content = action_button(
-                        "Verify & Complete", ft.Icons.CHECK_CIRCLE_OUTLINE, on_create_account
+                        "Verify Email", ft.Icons.CHECK, on_create_account
                     )
                     ca_error.value = "Verification code sent to your email."
                     ca_error.color = ft.Colors.GREEN_400
@@ -251,7 +286,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
             threading.Thread(target=send_code_thread, daemon=True).start()
         else:
-            if not ca_code_field.value:
+            if not ca_code_field.value or len(ca_code_field.value) != 6:
                 ca_error.value = "Please enter the verification code."
                 ca_error.visible = True
                 ca_error.color = ft.Colors.RED_400
@@ -278,6 +313,9 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         access_code=signup_state.access_code,
                     )
                     handle_go_to_sign_in(None, prefill_email=ca_email.value)
+                    ca_error.value = "Account created successfully."
+                    ca_error.color = ft.Colors.GREEN_400
+                    ca_error.visible = True
                 except Exception as ex:
                     error_msg = str(ex).lower()
                     if "rate limit" in error_msg or "too many requests" in error_msg:
@@ -290,13 +328,68 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                     ca_error.color = ft.Colors.RED_400
                     ca_error.visible = True
                     ca_action_button_container.content = action_button(
-                        "Verify & Complete", ft.Icons.CHECK_CIRCLE_OUTLINE, on_create_account
+                        "Verify Email", ft.Icons.CHECK, on_create_account
                     )
                 finally:
                     signup_state.processing = False
+                    if signup_state.step == 2 and ca_action_button_container.content is not None:
+                        ca_action_button_container.content = action_button(
+                            "Verify Email", ft.Icons.CHECK, on_create_account
+                        )
                     page.update()
 
             threading.Thread(target=create_account_thread, daemon=True).start()
+
+    def on_resend_code(e):
+        if signup_state.processing:
+            return
+        signup_state.processing = True
+        ca_action_button_container.content = loading_button("Resending code...")
+        page.update()
+
+        def resend_thread():
+            signup_state.access_code = generate_access_code()
+            try:
+                send_signup_verification(
+                    email=ca_email.value,
+                    full_name=ca_fullname.value,
+                    temp_password=ca_password.value,
+                    access_code=signup_state.access_code,
+                )
+                ca_error.value = "A new code was sent to your email."
+                ca_error.color = ft.Colors.GREEN_400
+                ca_error.visible = True
+            except Exception as email_error:
+                ca_error.value = f"Failed to resend code: {email_error}"
+                ca_error.color = ft.Colors.RED_400
+                ca_error.visible = True
+            finally:
+                ca_action_button_container.content = action_button(
+                    "Verify Email", ft.Icons.CHECK, on_create_account
+                )
+                signup_state.processing = False
+                page.update()
+
+        threading.Thread(target=resend_thread, daemon=True).start()
+
+    def on_back_to_signup(e):
+        if signup_state.processing:
+            return
+        signup_state.step = 1
+        ca_error.visible = False
+        ca_back_link.visible = False
+        ca_step1_header.visible = True
+        ca_step1.visible = True
+        google_btn_signup.visible = True
+        ca_or_divider.visible = True
+        ca_bottom_row.visible = True
+        ca_step2_header.visible = False
+        ca_step2.visible = False
+        ca_resend_row.visible = False
+        ca_action_button_container.content = action_button(
+            "Create Account", ft.Icons.PERSON_ADD_ROUNDED, on_create_account
+        )
+        page.update()
 
     ca_fullname.on_submit = on_create_account
     ca_email.on_submit = on_create_account
@@ -436,12 +529,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     )
     ca_step2 = ft.Column(
         [
-            ft.Text(
-                "6-Digit Verification Code",
-                size=13,
-                weight=ft.FontWeight.W_500,
-                color=ft.Colors.WHITE,
-            ),
+            ft.Text("Verification code", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
             ft.Container(height=4),
             ca_code_field,
             ft.Container(height=8),
@@ -453,37 +541,96 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         content=action_button("Create Account", ft.Icons.PERSON_ADD_ROUNDED, on_create_account)
     )
 
-    create_account_form = ft.Column(
+    ca_step1_header = ft.Column(
         [
-            brand_header(),
-            ft.Container(height=8),
             ft.Text(
                 "Create your account", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
             ),
             ft.Text("Join QualCheck as an evaluator", size=13, color="#8b9bb4"),
+        ],
+        spacing=0,
+        visible=True,
+    )
+
+    ca_back_link = ft.GestureDetector(
+        content=ft.Row(
+            [
+                ft.Icon(ft.Icons.ARROW_BACK, size=14, color="#8b9bb4"),
+                ft.Text("Back to sign up", size=13, color="#8b9bb4"),
+            ],
+            spacing=6,
+        ),
+        on_tap=on_back_to_signup,
+        visible=False,
+    )
+
+    ca_step2_header = ft.Column(
+        [
+            ft.Container(
+                content=ft.Icon(ft.Icons.MAIL_OUTLINE, color="#3b82f6", size=24),
+                width=52,
+                height=52,
+                alignment=ft.alignment.center,
+                border_radius=26,
+                bgcolor="#192a42",
+                border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#3b82f6")),
+            ),
+            ft.Container(height=14),
+            ft.Text("Verify your email", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Container(height=4),
+            verify_email_text,
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=0,
+        width=400,
+        visible=False,
+    )
+
+    ca_resend_row = build_resend_code_control(
+        on_click=on_resend_code,
+        label_color="#4a5b75",
+        action_color=ft.Colors.BLUE_400,
+        visible=False,
+    )
+
+    ca_or_divider = or_divider()
+
+    ca_bottom_row = ft.Row(
+        [
+            ft.Text("Already have an account?", size=13, color="#4a5b75"),
+            ft.TextButton(
+                "Sign in",
+                style=ft.ButtonStyle(color=ft.Colors.BLUE_400, padding=ft.padding.all(0)),
+                on_click=lambda e: handle_go_to_sign_in(e),
+            ),
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=4,
+        visible=True,
+    )
+
+    create_account_form = ft.Column(
+        [
+            brand_header(),
+            ft.Container(height=8),
+            ca_back_link,
+            ft.Container(height=8),
+            ca_step1_header,
+            ca_step2_header,
             ft.Container(height=12),
             google_btn_signup,
             ft.Container(height=10),
-            or_divider(),
+            ca_or_divider,
             ft.Container(height=10),
             ca_step1,
             ca_step2,
             ca_error,
             ft.Container(height=14),
             ca_action_button_container,
+            ft.Container(height=12),
+            ca_resend_row,
             ft.Container(height=16),
-            ft.Row(
-                [
-                    ft.Text("Already have an account?", size=13, color="#4a5b75"),
-                    ft.TextButton(
-                        "Sign in",
-                        style=ft.ButtonStyle(color=ft.Colors.BLUE_400, padding=ft.padding.all(0)),
-                        on_click=lambda e: handle_go_to_sign_in(e),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=4,
-            ),
+            ca_bottom_row,
         ],
         spacing=0,
         horizontal_alignment=ft.CrossAxisAlignment.START,

@@ -137,7 +137,7 @@ class EmailService:
                     <p>{greeting}</p>
                     <p>We received a request to reset your password for your QualCheck account.</p>
                     {code_section}
-                    <p><strong>This code expires in 1 hour.</strong></p>
+                    <p><strong>This code expires in 5 minutes.</strong></p>
                     <p>If you didn't request this password reset, please ignore this email.</p>
                 </div>
                 <div class="footer">

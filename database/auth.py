@@ -260,20 +260,20 @@ def generate_reset_token() -> str:
     return str(random.randint(100000, 999999))
 
 
-def store_reset_token(email: str, token: str, expires_hours: int = 1) -> bool:
+def store_reset_token(email: str, token: str, expires_minutes: int = 5) -> bool:
     """
     Store password reset token in database.
     
     Args:
         email: User's email address
         token: Reset token
-        expires_hours: Token expiration time in hours
+        expires_minutes: Token expiration time in minutes
     
     Returns:
         True if token stored successfully
     """
     try:
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
         
         # Store token in password_resets table
         reset_table = supabase_admin.table('password_resets')
@@ -381,6 +381,11 @@ def send_password_reset_email(email: str) -> tuple[bool, str]:
         error_message = str(e)
         print(f"Password reset error: {e}")
         return False, error_message
+
+
+def resend_password_reset_email(email: str) -> tuple[bool, str]:
+    """Send a fresh five-minute password reset code."""
+    return send_password_reset_email(email)
 
 
 def reset_password_with_token(token: str, new_password: str) -> tuple[bool, str]:
