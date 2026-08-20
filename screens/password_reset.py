@@ -4,6 +4,24 @@ import time
 import threading
 import flet as ft
 from utils.resend_control import build_resend_code_control
+from utils.utils import (
+    BG_COLOR,
+    CARD_BG_COLOR,
+    PRIMARY_BLUE,
+    PRIMARY_BLUE_DARK,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+    BORDER_COLOR,
+    INPUT_BG,
+    INPUT_BORDER,
+    INPUT_TEXT,
+    INPUT_HINT,
+    BUTTON_PRIMARY_BG,
+    BUTTON_PRIMARY_TEXT,
+    ERROR,
+    SUCCESS,
+)
 
 try:
     from database.auth import (
@@ -63,15 +81,15 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             password=password,
             can_reveal_password=reveal,
             width=380,
-            height=44,
-            bgcolor="#1b293e",
-            border_color="#2a3d58",
-            focused_border_color=ft.Colors.BLUE_400,
+            height=46,
+            bgcolor=INPUT_BG,
+            border_color=INPUT_BORDER,
+            focused_border_color=PRIMARY_BLUE,
             text_size=14,
             text_align=text_align,
             content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
-            hint_style=ft.TextStyle(color="#546a8a"),
-            color=ft.Colors.WHITE,
+            hint_style=ft.TextStyle(color=INPUT_HINT),
+            color=INPUT_TEXT,
             border_radius=8,
         )
 
@@ -80,15 +98,15 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     code_field = ft.TextField(
         hint_text="• • • • • •",
         width=380,
-        height=44,
-        bgcolor="#1b293e",
-        border_color="#2a3d58",
-        focused_border_color=ft.Colors.BLUE_400,
+        height=46,
+        bgcolor=INPUT_BG,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
         text_size=14,
         text_align=ft.TextAlign.CENTER,
         content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
-        hint_style=ft.TextStyle(color="#546a8a"),
-        color=ft.Colors.WHITE,
+        hint_style=ft.TextStyle(color=INPUT_HINT),
+        color=INPUT_TEXT,
         border_radius=8,
         max_length=6,
         input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]"),
@@ -100,27 +118,23 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     )
     confirm_field = tf(hint="••••••••", password=True, reveal=True)
 
-    message = ft.Text("", size=12, color=ft.Colors.RED_400, visible=False, text_align=ft.TextAlign.CENTER)
+    message = ft.Text("", size=12, color=ERROR, visible=False, text_align=ft.TextAlign.CENTER)
 
     # Top Brand Header
     header = ft.Row(
         [
             ft.Container(
                 content=ft.Text("Q", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                bgcolor=ft.Colors.BLUE_600,
+                bgcolor=PRIMARY_BLUE,
                 width=38,
                 height=38,
                 border_radius=8,
                 alignment=ft.alignment.center,
-                shadow=ft.BoxShadow(
-                    blur_radius=10, color=ft.Colors.with_opacity(0.4, ft.Colors.BLUE_500),
-                    offset=ft.Offset(0, 2)
-                ),
             ),
             ft.Column(
                 [
-                    ft.Text("QualCheck", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    ft.Text("Semantic Evaluation System", size=11, color="#6c82a3"),
+                    ft.Text("QualCheck", size=16, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                    ft.Text("Semantic Evaluation System", size=11, color=TEXT_TERTIARY),
                 ],
                 spacing=0,
             ),
@@ -130,11 +144,11 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         width=380,
     )
 
-    back_btn_text = ft.Text("Back to sign in", size=13, color="#8096b5")
+    back_btn_text = ft.Text("Back to sign in", size=13, color=TEXT_SECONDARY)
     back_button = ft.GestureDetector(
         content=ft.Row(
             [
-                ft.Icon(ft.Icons.ARROW_BACK, size=14, color="#8096b5"),
+                ft.Icon(ft.Icons.ARROW_BACK, size=14, color=TEXT_SECONDARY),
                 back_btn_text,
             ],
             spacing=6,
@@ -148,15 +162,15 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         def button_content():
             controls = []
             if icon:
-                controls.append(ft.Icon(icon, size=16, color=ft.Colors.WHITE))
-            controls.append(ft.Text(text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE))
+                controls.append(ft.Icon(icon, size=16, color=BUTTON_PRIMARY_TEXT))
+            controls.append(ft.Text(text, size=14, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT))
             return ft.Row(controls, alignment=ft.MainAxisAlignment.CENTER, spacing=8)
 
         button = ft.Container(
             content=button_content(),
             width=380,
-            height=44,
-            bgcolor="#2563eb",
+            height=46,
+            bgcolor=BUTTON_PRIMARY_BG,
             border_radius=8,
             alignment=ft.alignment.center,
             ink=True,
@@ -169,8 +183,8 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         if is_loading:
             button.content = ft.Row(
                 [
-                    ft.ProgressRing(width=16, height=16, stroke_width=2, color=ft.Colors.WHITE),
-                    ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ft.ProgressRing(width=16, height=16, stroke_width=2, color=BUTTON_PRIMARY_TEXT),
+                    ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=8,
@@ -185,7 +199,8 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         resend_link.text = "Resending code..." if is_loading else "Didn't receive it? Resend"
 
     # Icon Badges
-    def make_badge(icon, bg_color="#1d2e47", icon_color="#3b82f6"):
+    def make_badge(icon, bg_color="#eef4ff", icon_color=None):
+        icon_color = icon_color or PRIMARY_BLUE
         return ft.Container(
             content=ft.Icon(icon, color=icon_color, size=24),
             width=52,
@@ -193,7 +208,7 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             alignment=ft.alignment.center,
             border_radius=26,
             bgcolor=bg_color,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.3, icon_color)),
+            border=ft.border.all(1, ft.Colors.with_opacity(0.35, icon_color)),
         )
 
     # ------------------ STEP 1: Enter Email ------------------
@@ -202,14 +217,14 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     step1 = ft.Column(
         [
             ft.Container(height=12),
-            make_badge(ft.Icons.EMAIL_OUTLINED, bg_color="#192a42", icon_color="#3b82f6"),
+            make_badge(ft.Icons.EMAIL_OUTLINED),
             ft.Container(height=14),
-            ft.Text("Forgot your password?", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Text("Enter your email and we'll send you a reset code.", size=13, color="#8096b5", text_align=ft.TextAlign.CENTER),
+            ft.Text("Forgot your password?", size=20, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+            ft.Text("Enter your email and we'll send you a reset code.", size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
             ft.Container(height=20),
             ft.Column(
                 [
-                    ft.Text("Email address", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                    ft.Text("Email address", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
                     ft.Container(height=4),
                     email_field,
                 ],
@@ -226,34 +241,34 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     )
 
     # ------------------ STEP 2: Inbox Notice ------------------
-    sent_email_text = ft.Text("", size=13, color="#8096b5", text_align=ft.TextAlign.CENTER)
+    sent_email_text = ft.Text("", size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER)
 
     step2_btn = primary_button("Enter reset code", icon=ft.Icons.VPN_KEY_OUTLINED)
 
     resend_link = build_resend_code_control(
         on_click=None,
-        label_color="#8096b5",
-        action_color="#60a5fa",
+        label_color=TEXT_SECONDARY,
+        action_color=PRIMARY_BLUE,
     )
 
     step2 = ft.Column(
         [
             ft.Container(height=12),
-            make_badge(ft.Icons.MAIL_OUTLINE, bg_color="#192a42", icon_color="#3b82f6"),
+            make_badge(ft.Icons.MAIL_OUTLINE),
             ft.Container(height=14),
-            ft.Text("Forgot your password?", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Text("Enter your email and we'll send you a reset code.", size=13, color="#8096b5", text_align=ft.TextAlign.CENTER),
+            ft.Text("Forgot your password?", size=20, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+            ft.Text("Enter your email and we'll send you a reset code.", size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
             ft.Container(height=20),
             ft.Container(
-                content=ft.Icon(ft.Icons.CHECK, color="#10b981", size=18),
+                content=ft.Icon(ft.Icons.CHECK, color=SUCCESS, size=18),
                 width=36,
                 height=36,
                 alignment=ft.alignment.center,
                 border_radius=18,
-                bgcolor="#12352b",
+                bgcolor="#e7f9f1",
             ),
             ft.Container(height=14),
-            ft.Text("Check your inbox", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Check your inbox", size=20, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
             ft.Container(height=6),
             sent_email_text,
             ft.Container(height=20),
@@ -273,22 +288,22 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     step3 = ft.Column(
         [
             ft.Container(height=12),
-            make_badge(ft.Icons.VPN_KEY_OUTLINED, bg_color="#192a42", icon_color="#3b82f6"),
+            make_badge(ft.Icons.VPN_KEY_OUTLINED),
             ft.Container(height=14),
-            ft.Text("Reset your password", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Text("Enter the 6-digit code from your email and choose a new password.", size=13, color="#8096b5", text_align=ft.TextAlign.CENTER),
+            ft.Text("Reset your password", size=20, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+            ft.Text("Enter the 6-digit code from your email and choose a new password.", size=13, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
             ft.Container(height=20),
             ft.Column(
                 [
-                    ft.Text("6-digit code", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                    ft.Text("6-digit code", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
                     ft.Container(height=4),
                     code_field,
                     ft.Container(height=12),
-                    ft.Text("New password", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                    ft.Text("New password", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
                     ft.Container(height=4),
                     new_password,
                     ft.Container(height=12),
-                    ft.Text("Confirm new password", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                    ft.Text("Confirm new password", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
                     ft.Container(height=4),
                     confirm_field,
                 ],
@@ -321,7 +336,7 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             return
         if not email_field.value:
             message.value = "Please enter your email address."
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
@@ -334,13 +349,13 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             if success:
                 sent_email_text.spans = [
                     ft.TextSpan("We sent a reset code to "),
-                    ft.TextSpan(email_field.value, ft.TextStyle(weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)),
+                    ft.TextSpan(email_field.value, ft.TextStyle(weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY)),
                     ft.TextSpan(". It expires in 5 minutes."),
                 ]
                 show_step(2)
             else:
                 message.value = resp
-                message.color = ft.Colors.RED_400
+                message.color = ERROR
                 message.visible = True
         finally:
             processing["value"] = False
@@ -355,7 +370,7 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             return
         if not email_field.value:
             message.value = "Please enter your email address."
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
@@ -366,7 +381,7 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         try:
             success, resp = resend_password_reset_email(email_field.value)
             message.value = "A new verification code was sent to your email." if success else resp
-            message.color = ft.Colors.GREEN_400 if success else ft.Colors.RED_400
+            message.color = SUCCESS if success else ERROR
             message.visible = True
         finally:
             processing["value"] = False
@@ -378,13 +393,13 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             return
         if not code_field.value:
             message.value = "Please enter the verification code."
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
         if len(code_field.value.strip()) != 6:
             message.value = "Please enter the 6-digit verification code."
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
@@ -392,14 +407,14 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         is_valid, pwd_err = validate_password(new_password.value or "")
         if not is_valid:
             message.value = pwd_err
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
 
         if new_password.value != confirm_field.value:
             message.value = "Passwords do not match."
-            message.color = ft.Colors.RED_400
+            message.color = ERROR
             message.visible = True
             page.update()
             return
@@ -411,14 +426,14 @@ def build_reset_password_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             ok, msg = reset_password_with_token(code_field.value, new_password.value)
             if ok:
                 message.value = "Password reset successfully! You can now sign in."
-                message.color = ft.Colors.GREEN_400
+                message.color = SUCCESS
                 message.visible = True
                 page.update()
                 time.sleep(1.5)
                 navigate_back()
             else:
                 message.value = msg
-                message.color = ft.Colors.RED_400
+                message.color = ERROR
                 message.visible = True
         finally:
             processing["value"] = False
@@ -473,17 +488,17 @@ def main(page: ft.Page, nav=None):
     page.window_min_height = 800
     page.window_resizable = True
     page.padding = 0
-    page.bgcolor = "#0b1523"
-    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = BG_COLOR
+    page.theme_mode = ft.ThemeMode.LIGHT
     page.appbar = None
     page.clean()
 
-    # Background ambient lighting blobs
+    # Soft ambient blue glows, subtle enough for a light background
     blob1 = ft.Container(
         width=600, height=600,
         gradient=ft.RadialGradient(
-            colors=[ft.Colors.with_opacity(0.12, ft.Colors.BLUE_400),
-                    ft.Colors.with_opacity(0.0,  ft.Colors.BLUE_400)],
+            colors=[ft.Colors.with_opacity(0.10, PRIMARY_BLUE),
+                    ft.Colors.with_opacity(0.0, PRIMARY_BLUE)],
             stops=[0.0, 1.0],
         ),
         left=-100, top=-100,
@@ -491,8 +506,8 @@ def main(page: ft.Page, nav=None):
     blob2 = ft.Container(
         width=800, height=800,
         gradient=ft.RadialGradient(
-            colors=[ft.Colors.with_opacity(0.08, ft.Colors.CYAN_400),
-                    ft.Colors.with_opacity(0.0,  ft.Colors.CYAN_400)],
+            colors=[ft.Colors.with_opacity(0.07, ft.Colors.CYAN_300),
+                    ft.Colors.with_opacity(0.0, ft.Colors.CYAN_300)],
             stops=[0.0, 1.0],
         ),
         right=-200, bottom=-200,
@@ -528,11 +543,11 @@ def main(page: ft.Page, nav=None):
     # Card component
     card = ft.Container(
         content=reset_container,
-        bgcolor="#152234",
+        bgcolor=CARD_BG_COLOR,
         border_radius=16,
         width=450,
-        border=ft.border.all(1, "#213248"),
-        shadow=ft.BoxShadow(blur_radius=40, color="#040912", offset=ft.Offset(0, 12), spread_radius=0),
+        border=ft.border.all(1, BORDER_COLOR),
+        shadow=ft.BoxShadow(blur_radius=32, color=ft.Colors.with_opacity(0.08, "#1e293b"), offset=ft.Offset(0, 12), spread_radius=0),
     )
 
     # Bottom features footer
@@ -540,24 +555,24 @@ def main(page: ft.Page, nav=None):
         [
             ft.Column(
                 [
-                    ft.Text("BERT", size=13, weight=ft.FontWeight.BOLD, color="#3b82f6"),
-                    ft.Text("Embeddings", size=11, color="#536988"),
+                    ft.Text("BERT", size=13, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
+                    ft.Text("Embeddings", size=11, color=TEXT_TERTIARY),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=2,
             ),
             ft.Column(
                 [
-                    ft.Text("Cosine", size=13, weight=ft.FontWeight.BOLD, color="#3b82f6"),
-                    ft.Text("Similarity", size=11, color="#536988"),
+                    ft.Text("Cosine", size=13, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
+                    ft.Text("Similarity", size=11, color=TEXT_TERTIARY),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=2,
             ),
             ft.Column(
                 [
-                    ft.Text("Rubric", size=13, weight=ft.FontWeight.BOLD, color="#3b82f6"),
-                    ft.Text("Guided", size=11, color="#536988"),
+                    ft.Text("Rubric", size=13, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
+                    ft.Text("Guided", size=11, color=TEXT_TERTIARY),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=2,

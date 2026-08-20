@@ -15,6 +15,24 @@ from services.registration import (
     complete_registration,
 )
 from utils.resend_control import build_resend_code_control
+from utils.utils import (
+    BG_COLOR,
+    CARD_BG_COLOR,
+    PRIMARY_BLUE,
+    PRIMARY_BLUE_DARK,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+    BORDER_COLOR,
+    INPUT_BG,
+    INPUT_BORDER,
+    INPUT_TEXT,
+    INPUT_HINT,
+    BUTTON_PRIMARY_BG,
+    BUTTON_PRIMARY_TEXT,
+    ERROR,
+    SUCCESS,
+)
 
 try:
     from database.auth import validate_password
@@ -38,28 +56,6 @@ except (ModuleNotFoundError, ImportError):
         return True, ""
 
 
-def brand_header():
-    logo = ft.Container(
-        content=ft.Text("Q", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-        bgcolor=ft.Colors.BLUE_500,
-        width=38,
-        height=38,
-        border_radius=8,
-        alignment=ft.alignment.center,
-        shadow=ft.BoxShadow(
-            blur_radius=10, color=ft.Colors.BLUE_500, offset=ft.Offset(0, 0), spread_radius=2
-        ),
-    )
-    brand = ft.Column(
-        [
-            ft.Text("QualCheck", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-            ft.Text("Semantic Evaluation System", size=11, color="#8b9bb4"),
-        ],
-        spacing=0,
-    )
-    return ft.Row([logo, brand], spacing=12, alignment=ft.MainAxisAlignment.START)
-
-
 GOOGLE_LOGO_URL = "assets/google.png"
 
 
@@ -68,25 +64,25 @@ def google_button(label):
         content=ft.Row(
             [
                 ft.Image(src=GOOGLE_LOGO_URL, width=18, height=18),
-                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color="#1a1a1a"),
+                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
         ),
-        bgcolor=ft.Colors.WHITE,
+        bgcolor=CARD_BG_COLOR,
         border_radius=8,
-        height=44,
+        height=46,
         width=400,
         alignment=ft.alignment.center,
-        border=ft.border.all(1, "#d1d5db"),
+        border=ft.border.all(1, BORDER_COLOR),
         ink=True,
     )
 
 
 def or_divider():
-    line = ft.Container(height=1, bgcolor="#2a3b54", expand=True)
+    line = ft.Container(height=1, bgcolor=BORDER_COLOR, expand=True)
     return ft.Row(
-        [line, ft.Text("or", size=12, color="#4a5b75"), line],
+        [line, ft.Text("or", size=12, color=TEXT_TERTIARY), line],
         spacing=12,
         width=400,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -101,14 +97,14 @@ def text_field(hint="", password=False, reveal=False, read_only=False, value="")
         read_only=read_only,
         value=value,
         width=400,
-        height=44,
-        bgcolor="#1e2f46",
-        border_color="#2e4060",
-        focused_border_color=ft.Colors.BLUE_400,
+        height=46,
+        bgcolor=INPUT_BG,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
         text_size=14,
         content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
-        hint_style=ft.TextStyle(color="#4a5b75"),
-        color=ft.Colors.WHITE,
+        hint_style=ft.TextStyle(color=INPUT_HINT),
+        color=INPUT_TEXT,
         border_radius=8,
     )
 
@@ -117,15 +113,15 @@ def loading_button(label):
     return ft.Container(
         content=ft.Row(
             [
-                ft.ProgressRing(width=16, height=16, stroke_width=2, color=ft.Colors.WHITE),
-                ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color=BUTTON_PRIMARY_TEXT),
+                ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
         ),
         width=400,
-        height=46,
-        bgcolor=ft.Colors.BLUE_600,
+        height=48,
+        bgcolor=BUTTON_PRIMARY_BG,
         border_radius=8,
         alignment=ft.alignment.center,
     )
@@ -135,15 +131,15 @@ def action_button(label, icon, on_click):
     return ft.Container(
         content=ft.Row(
             [
-                ft.Icon(icon, size=16, color=ft.Colors.WHITE),
-                ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Icon(icon, size=16, color=BUTTON_PRIMARY_TEXT),
+                ft.Text(label, size=14, weight=ft.FontWeight.BOLD, color=BUTTON_PRIMARY_TEXT),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
         ),
         width=400,
-        height=46,
-        bgcolor=ft.Colors.BLUE_600,
+        height=48,
+        bgcolor=BUTTON_PRIMARY_BG,
         border_radius=8,
         alignment=ft.alignment.center,
         ink=True,
@@ -167,7 +163,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                     target=lambda: login_main(page, nav), daemon=True
                 ).start()
 
-    ca_error = ft.Text("", size=12, color=ft.Colors.RED_400, visible=False)
+    ca_error = ft.Text("", size=12, color=ERROR, visible=False)
 
     ca_fullname = text_field(hint="Prof. Maria Santos")
     ca_email = text_field(hint="you@university.edu")
@@ -178,15 +174,15 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     ca_code_field = ft.TextField(
         hint_text="• • • • • •",
         width=400,
-        height=44,
-        bgcolor="#1e2f46",
-        border_color="#2e4060",
-        focused_border_color=ft.Colors.BLUE_400,
+        height=46,
+        bgcolor=INPUT_BG,
+        border_color=INPUT_BORDER,
+        focused_border_color=PRIMARY_BLUE,
         text_size=14,
         text_align=ft.TextAlign.CENTER,
         content_padding=ft.padding.symmetric(horizontal=14, vertical=10),
-        hint_style=ft.TextStyle(color="#4a5b75"),
-        color=ft.Colors.WHITE,
+        hint_style=ft.TextStyle(color=INPUT_HINT),
+        color=INPUT_TEXT,
         border_radius=8,
         max_length=6,
         input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]"),
@@ -195,7 +191,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     verify_email_text = ft.Text(
         "",
         size=13,
-        color="#8b9bb4",
+        color=TEXT_SECONDARY,
         text_align=ft.TextAlign.CENTER,
     )
 
@@ -219,20 +215,20 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             ):
                 ca_error.value = "Please fill in all fields."
                 ca_error.visible = True
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 page.update()
                 return
             if ca_password.value != ca_confirm.value:
                 ca_error.value = "Passwords do not match."
                 ca_error.visible = True
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 page.update()
                 return
             is_valid, password_error = validate_password(ca_password.value)
             if not is_valid:
                 ca_error.value = password_error
                 ca_error.visible = True
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 page.update()
                 return
 
@@ -255,7 +251,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         ft.TextSpan("We sent a 6-digit code to\n"),
                         ft.TextSpan(
                             ca_email.value,
-                            ft.TextStyle(weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.TextStyle(weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
                         ),
                     ]
                     ca_step1_header.visible = False
@@ -271,11 +267,11 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         "Verify Email", ft.Icons.CHECK, on_create_account
                     )
                     ca_error.value = "Verification code sent to your email."
-                    ca_error.color = ft.Colors.GREEN_400
+                    ca_error.color = SUCCESS
                     ca_error.visible = True
                 except Exception as email_error:
                     ca_error.value = f"Failed to send email: {email_error}"
-                    ca_error.color = ft.Colors.RED_400
+                    ca_error.color = ERROR
                     ca_error.visible = True
                     ca_action_button_container.content = action_button(
                         "Create Account", ft.Icons.PERSON_ADD_ROUNDED, on_create_account
@@ -289,13 +285,13 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             if not ca_code_field.value or len(ca_code_field.value) != 6:
                 ca_error.value = "Please enter the verification code."
                 ca_error.visible = True
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 page.update()
                 return
             if ca_code_field.value != signup_state.access_code:
                 ca_error.value = "Invalid verification code."
                 ca_error.visible = True
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 page.update()
                 return
 
@@ -314,7 +310,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                     )
                     handle_go_to_sign_in(None, prefill_email=ca_email.value)
                     ca_error.value = "Account created successfully."
-                    ca_error.color = ft.Colors.GREEN_400
+                    ca_error.color = SUCCESS
                     ca_error.visible = True
                 except Exception as ex:
                     error_msg = str(ex).lower()
@@ -325,7 +321,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         )
                     else:
                         ca_error.value = f"Registration failed: {str(ex)}"
-                    ca_error.color = ft.Colors.RED_400
+                    ca_error.color = ERROR
                     ca_error.visible = True
                     ca_action_button_container.content = action_button(
                         "Verify Email", ft.Icons.CHECK, on_create_account
@@ -357,11 +353,11 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                     access_code=signup_state.access_code,
                 )
                 ca_error.value = "A new code was sent to your email."
-                ca_error.color = ft.Colors.GREEN_400
+                ca_error.color = SUCCESS
                 ca_error.visible = True
             except Exception as email_error:
                 ca_error.value = f"Failed to resend code: {email_error}"
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 ca_error.visible = True
             finally:
                 ca_action_button_container.content = action_button(
@@ -401,7 +397,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
         return ft.Row(
             [
                 ft.Image(src=GOOGLE_LOGO_URL, width=18, height=18),
-                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color="#1a1a1a"),
+                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
@@ -410,8 +406,8 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     def _google_loading_content(label):
         return ft.Row(
             [
-                ft.ProgressRing(width=16, height=16, stroke_width=2, color="#1a1a1a"),
-                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color="#1a1a1a"),
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color=TEXT_PRIMARY),
+                ft.Text(label, size=14, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
@@ -461,7 +457,7 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                     except Exception:
                         pass
                     ca_error.value = "Your account has been disabled. Please contact an administrator."
-                    ca_error.color = ft.Colors.RED_400
+                    ca_error.color = ERROR
                     ca_error.visible = True
                     _reset_google_button()
                     page.update()
@@ -487,13 +483,13 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
                         nav.navigate_to_short_answer()
                     else:
                         ca_error.value = "Invalid user role."
-                        ca_error.color = ft.Colors.RED_400
+                        ca_error.color = ERROR
                         ca_error.visible = True
                         _reset_google_button()
                         page.update()
             except Exception as ex:
                 ca_error.value = f"Google sign-in failed: {str(ex)}"
-                ca_error.color = ft.Colors.RED_400
+                ca_error.color = ERROR
                 ca_error.visible = True
                 _reset_google_button()
                 page.update()
@@ -507,20 +503,20 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
     ca_step1 = ft.Column(
         [
-            ft.Text("Full Name", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-            ft.Container(height=4),
+            ft.Text("Full Name", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ft.Container(height=6),
             ca_fullname,
-            ft.Container(height=8),
-            ft.Text("Email", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-            ft.Container(height=4),
+            ft.Container(height=14),
+            ft.Text("Email", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ft.Container(height=6),
             ca_email,
-            ft.Container(height=8),
-            ft.Text("Password", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-            ft.Container(height=4),
+            ft.Container(height=14),
+            ft.Text("Password", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ft.Container(height=6),
             ca_password,
-            ft.Container(height=8),
-            ft.Text("Confirm Password", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-            ft.Container(height=4),
+            ft.Container(height=14),
+            ft.Text("Confirm Password", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ft.Container(height=6),
             ca_confirm,
             ft.Container(height=8),
         ],
@@ -529,8 +525,8 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     )
     ca_step2 = ft.Column(
         [
-            ft.Text("Verification code", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-            ft.Container(height=4),
+            ft.Text("Verification code", size=13, weight=ft.FontWeight.W_500, color=TEXT_PRIMARY),
+            ft.Container(height=6),
             ca_code_field,
             ft.Container(height=8),
         ],
@@ -544,9 +540,9 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     ca_step1_header = ft.Column(
         [
             ft.Text(
-                "Create your account", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
+                "Create your account", size=25, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY
             ),
-            ft.Text("Join QualCheck as an evaluator", size=13, color="#8b9bb4"),
+            ft.Text("Join QualCheck as an evaluator", size=13, color=TEXT_SECONDARY),
         ],
         spacing=0,
         visible=True,
@@ -555,8 +551,8 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     ca_back_link = ft.GestureDetector(
         content=ft.Row(
             [
-                ft.Icon(ft.Icons.ARROW_BACK, size=14, color="#8b9bb4"),
-                ft.Text("Back to sign up", size=13, color="#8b9bb4"),
+                ft.Icon(ft.Icons.ARROW_BACK, size=14, color=TEXT_SECONDARY),
+                ft.Text("Back to sign up", size=13, color=TEXT_SECONDARY),
             ],
             spacing=6,
         ),
@@ -567,16 +563,16 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
     ca_step2_header = ft.Column(
         [
             ft.Container(
-                content=ft.Icon(ft.Icons.MAIL_OUTLINE, color="#3b82f6", size=24),
+                content=ft.Icon(ft.Icons.MAIL_OUTLINE, color=PRIMARY_BLUE, size=24),
                 width=52,
                 height=52,
                 alignment=ft.alignment.center,
                 border_radius=26,
-                bgcolor="#192a42",
-                border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#3b82f6")),
+                bgcolor="#eef4ff",
+                border=ft.border.all(1, ft.Colors.with_opacity(0.35, PRIMARY_BLUE)),
             ),
             ft.Container(height=14),
-            ft.Text("Verify your email", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Verify your email", size=20, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
             ft.Container(height=4),
             verify_email_text,
         ],
@@ -588,8 +584,8 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
     ca_resend_row = build_resend_code_control(
         on_click=on_resend_code,
-        label_color="#4a5b75",
-        action_color=ft.Colors.BLUE_400,
+        label_color=TEXT_TERTIARY,
+        action_color=PRIMARY_BLUE,
         visible=False,
     )
 
@@ -597,10 +593,10 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
     ca_bottom_row = ft.Row(
         [
-            ft.Text("Already have an account?", size=13, color="#4a5b75"),
+            ft.Text("Already have an account?", size=13, color=TEXT_SECONDARY),
             ft.TextButton(
                 "Sign in",
-                style=ft.ButtonStyle(color=ft.Colors.BLUE_400, padding=ft.padding.all(0)),
+                style=ft.ButtonStyle(color=PRIMARY_BLUE, padding=ft.padding.all(0)),
                 on_click=lambda e: handle_go_to_sign_in(e),
             ),
         ],
@@ -611,17 +607,15 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
 
     create_account_form = ft.Column(
         [
-            brand_header(),
-            ft.Container(height=8),
             ca_back_link,
             ft.Container(height=8),
             ca_step1_header,
             ca_step2_header,
-            ft.Container(height=12),
+            ft.Container(height=22),
             google_btn_signup,
-            ft.Container(height=10),
+            ft.Container(height=18),
             ca_or_divider,
-            ft.Container(height=10),
+            ft.Container(height=18),
             ca_step1,
             ca_step2,
             ca_error,
@@ -629,17 +623,14 @@ def build_create_account_container(page: ft.Page, nav=None, on_go_to_sign_in=Non
             ca_action_button_container,
             ft.Container(height=12),
             ca_resend_row,
-            ft.Container(height=16),
+            ft.Container(height=20),
             ca_bottom_row,
         ],
         spacing=0,
         horizontal_alignment=ft.CrossAxisAlignment.START,
     )
 
-    container = ft.Container(
-        content=create_account_form,
-        padding=ft.padding.symmetric(horizontal=40, vertical=30),
-    )
+    container = ft.Container(content=create_account_form)
     return container, ca_email
 
 
@@ -652,76 +643,18 @@ def main(page: ft.Page, nav=None):
         return
 
     page.title = "QualCheck Create Account"
-    page.window_width = 900
+    page.window_width = 1180
     page.window_height = 780
-    page.window_min_width = 900
-    page.window_min_height = 780
+    page.window_min_width = 960
+    page.window_min_height = 640
     page.window_resizable = True
     page.padding = 0
-    page.bgcolor = "#0f1e30"
-    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = BG_COLOR
+    page.theme_mode = ft.ThemeMode.LIGHT
     page.appbar = None
     page.clean()
 
-    blob1 = ft.Container(
-        width=600,
-        height=600,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.12, ft.Colors.BLUE_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.BLUE_400),
-            ],
-            stops=[0.0, 1.0],
-        ),
-        left=-100,
-        top=-100,
-    )
-    blob2 = ft.Container(
-        width=800,
-        height=800,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.08, ft.Colors.CYAN_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.CYAN_400),
-            ],
-            stops=[0.0, 1.0],
-        ),
-        right=-200,
-        bottom=-200,
-    )
-    blob3 = ft.Container(
-        width=500,
-        height=500,
-        gradient=ft.RadialGradient(
-            colors=[
-                ft.Colors.with_opacity(0.10, ft.Colors.PURPLE_400),
-                ft.Colors.with_opacity(0.0, ft.Colors.PURPLE_400),
-            ],
-            stops=[0.0, 1.0],
-        ),
-        left=100,
-        bottom=-100,
-    )
-
     page.data["auth_active"] = True
-
-    def animate_blobs():
-        t = 0.0
-        while page.title in ("QualCheck Login", "QualCheck Create Account", "QualCheck - Reset Password") and page.data.get("auth_active", False):
-            try:
-                blob1.top = -100 + 80 * math.sin(t)
-                blob1.left = -100 + 120 * math.cos(t * 0.8)
-                blob2.bottom = -200 + 100 * math.cos(t * 0.9)
-                blob2.right = -200 + 150 * math.sin(t * 0.7)
-                blob3.bottom = -100 + 120 * math.sin(t * 1.1)
-                blob3.left = 100 + 80 * math.cos(t * 0.6)
-                page.update()
-                time.sleep(0.05)
-                t += 0.05
-            except Exception:
-                break
-
-    threading.Thread(target=animate_blobs, daemon=True).start()
 
     def on_go_to_sign_in(e=None, prefill_email=None):
         if page.data and page.data.get("auth_active") and "auth_controller" in page.data:
@@ -742,49 +675,26 @@ def main(page: ft.Page, nav=None):
                 daemon=True,
             ).start()
 
+    # --- minimal tab toggle (Sign In / Create Account), matches ui_login.py ---
     tab_signin = ft.Container(
-        content=ft.Text(
-            "Sign In",
-            size=14,
-            weight=ft.FontWeight.W_500,
-            color="#6b7f99",
-            text_align=ft.TextAlign.CENTER,
-        ),
-        padding=ft.padding.symmetric(horizontal=24, vertical=14),
-        bgcolor="#161f2e",
-        expand=True,
-        alignment=ft.alignment.center,
-        border_radius=ft.border_radius.only(top_left=16),
+        content=ft.Text("Sign In", size=13, weight=ft.FontWeight.W_500, color=TEXT_TERTIARY),
+        padding=ft.padding.only(bottom=10),
         on_click=lambda e: on_go_to_sign_in(e),
-        ink=True,
     )
     tab_create = ft.Container(
-        content=ft.Text(
-            "Create Account",
-            size=14,
-            weight=ft.FontWeight.BOLD,
-            color=ft.Colors.WHITE,
-            text_align=ft.TextAlign.CENTER,
-        ),
-        padding=ft.padding.symmetric(horizontal=24, vertical=14),
-        bgcolor="#1c2c44",
-        expand=True,
-        alignment=ft.alignment.center,
-        border_radius=ft.border_radius.only(top_right=16),
+        content=ft.Text("Create Account", size=13, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+        padding=ft.padding.only(bottom=10),
         on_click=lambda e: on_go_to_create_account(e),
-        ink=True,
     )
-    ind_signin = ft.Container(height=2, bgcolor="transparent", expand=True)
-    ind_create = ft.Container(height=2, bgcolor=ft.Colors.BLUE_500, expand=True)
+    ind_signin = ft.Container(height=2, width=52, bgcolor="transparent")
+    ind_create = ft.Container(height=2, width=110, bgcolor=PRIMARY_BLUE)
     tab_row = ft.Row(
         [
-            ft.Column([tab_signin, ind_signin], spacing=0, expand=True),
-            ft.Column([tab_create, ind_create], spacing=0, expand=True),
+            ft.Column([tab_signin, ind_signin], spacing=0),
+            ft.Column([tab_create, ind_create], spacing=0),
         ],
-        spacing=0,
-        expand=True,
+        spacing=28,
     )
-    tab_divider = ft.Container(height=1, bgcolor="#1e2f46")
 
     create_account_container, _ = build_create_account_container(page, nav, on_go_to_sign_in)
     sign_in_holder = {"container": None, "email_ref": None}
@@ -811,23 +721,17 @@ def main(page: ft.Page, nav=None):
         if prefill_email and sign_in_holder["email_ref"]:
             sign_in_holder["email_ref"].value = prefill_email
 
-        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
         form_wrapper.opacity = 0
         page.update()
         time.sleep(0.18)
 
         tab_row.visible = True
-        tab_divider.visible = True
-
-        tab_create.bgcolor = "#161f2e"
-        tab_create.content.color = "#6b7f99"
+        tab_create.content.color = TEXT_TERTIARY
         tab_create.content.weight = ft.FontWeight.W_500
         ind_create.bgcolor = "transparent"
-
-        tab_signin.bgcolor = "#1c2c44"
-        tab_signin.content.color = ft.Colors.WHITE
+        tab_signin.content.color = TEXT_PRIMARY
         tab_signin.content.weight = ft.FontWeight.BOLD
-        ind_signin.bgcolor = ft.Colors.BLUE_500
+        ind_signin.bgcolor = PRIMARY_BLUE
 
         page.title = "QualCheck Login"
         form_wrapper.content = sign_in_holder["container"]
@@ -841,23 +745,17 @@ def main(page: ft.Page, nav=None):
             return
         switching_lock["active"] = True
 
-        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
         form_wrapper.opacity = 0
         page.update()
         time.sleep(0.18)
 
         tab_row.visible = True
-        tab_divider.visible = True
-
-        tab_signin.bgcolor = "#161f2e"
-        tab_signin.content.color = "#6b7f99"
+        tab_signin.content.color = TEXT_TERTIARY
         tab_signin.content.weight = ft.FontWeight.W_500
         ind_signin.bgcolor = "transparent"
-
-        tab_create.bgcolor = "#1c2c44"
-        tab_create.content.color = ft.Colors.WHITE
+        tab_create.content.color = TEXT_PRIMARY
         tab_create.content.weight = ft.FontWeight.BOLD
-        ind_create.bgcolor = ft.Colors.BLUE_500
+        ind_create.bgcolor = PRIMARY_BLUE
 
         page.title = "QualCheck Create Account"
         form_wrapper.content = create_account_container
@@ -875,13 +773,11 @@ def main(page: ft.Page, nav=None):
             from screens.password_reset import build_reset_password_container
             reset_password_holder["container"] = build_reset_password_container(page, nav, on_go_to_sign_in)
 
-        form_wrapper.animate_opacity = ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT)
         form_wrapper.opacity = 0
         page.update()
         time.sleep(0.18)
 
         tab_row.visible = False
-        tab_divider.visible = False
 
         page.title = "QualCheck - Reset Password"
         form_wrapper.content = reset_password_holder["container"]
@@ -896,80 +792,40 @@ def main(page: ft.Page, nav=None):
         "switch_to_reset_password": switch_to_reset_password,
     }
 
-    card = ft.Container(
+    from screens.ui_login import build_left_panel
+    left_panel = build_left_panel(page)
+
+    right_panel = ft.Container(
         content=ft.Column(
             [
                 tab_row,
-                tab_divider,
+                ft.Container(height=26),
                 form_wrapper,
             ],
             spacing=0,
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         ),
-        bgcolor="#1c2c44",
-        border_radius=16,
-        width=480,
-        border=ft.border.all(1, "#243447"),
-        shadow=ft.BoxShadow(
-            blur_radius=40, color="#070f1a", offset=ft.Offset(0, 12), spread_radius=0
-        ),
+        bgcolor=BG_COLOR,
+        padding=ft.padding.symmetric(horizontal=54, vertical=40),
+        expand=5,
+        alignment=ft.alignment.center,
     )
 
-    bottom_links = ft.Row(
-        [
-            ft.Column(
-                [
-                    ft.Text("BERT", color=ft.Colors.BLUE_400, size=12, weight=ft.FontWeight.BOLD),
-                    ft.Text("Embeddings", color="#4a5b75", size=11),
-                ],
-                spacing=2,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            ft.Container(width=24),
-            ft.Column(
-                [
-                    ft.Text("Cosine", color=ft.Colors.BLUE_400, size=12, weight=ft.FontWeight.BOLD),
-                    ft.Text("Similarity", color="#4a5b75", size=11),
-                ],
-                spacing=2,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            ft.Container(width=24),
-            ft.Column(
-                [
-                    ft.Text("Rubric", color=ft.Colors.BLUE_400, size=12, weight=ft.FontWeight.BOLD),
-                    ft.Text("Guided", color="#4a5b75", size=11),
-                ],
-                spacing=2,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        ],
-        alignment=ft.MainAxisAlignment.CENTER,
+    layout = ft.Row(
+        [left_panel, right_panel],
+        spacing=0,
+        expand=True,
+        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
     )
+
     page_fade = ft.Container(
-        content=ft.Stack(
-            [
-                blob1,
-                blob2,
-                blob3,
-                ft.Column(
-                    [
-                        ft.Container(height=60),
-                        card,
-                        ft.Container(height=28),
-                        bottom_links,
-                        ft.Container(height=40),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    scroll=ft.ScrollMode.AUTO,
-                    expand=True,
-                ),
-            ],
-            expand=True,
-            clip_behavior=ft.ClipBehavior.NONE,
-        ),
+        content=layout,
         expand=True,
         opacity=0,
-        animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
+        animate_opacity=ft.Animation(260, ft.AnimationCurve.EASE_OUT),
     )
     page.add(page_fade)
     page.update()
