@@ -11,10 +11,10 @@ from screens.ui_dashboard import main as dashboard_main
 from screens.studenta_result import main as studenta_result_main
 from navigation.admin_navigation import AdminNavigation
 from utils.utils import (
-    CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
+    BG_COLOR, CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BORDER_COLOR
 )
-from services.session_manager import get_current_user, get_user_role
+from services.session_manager import get_current_user, get_user_role, logout as session_logout
 
 # Duration (ms) for the fade-out and fade-in halves of the transition.
 _FADE_MS = 150
@@ -212,7 +212,7 @@ class Navigation:
                             icon_size=20,
                             icon_color=TEXT_TERTIARY,
                             tooltip="Logout",
-                            on_click=lambda e: self.navigate_to_login()
+                            on_click=lambda e: self.logout()
                         ),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -225,6 +225,23 @@ class Navigation:
     # ------------------------------------------------------------------
     # Auth screens (no transition animation – full page swap)
     # ------------------------------------------------------------------
+    def logout(self):
+        """Sign the user out of Supabase, clear the local session file,
+        then navigate to the login screen."""
+        session_logout()
+        # Clear the stale auth-screen flag/controller left over from the
+        # previous login screen. If left set, login_main()'s short-circuit
+        # (`if page.data.get("auth_active") and "auth_controller" in
+        # page.data`) calls the old switch_to_login() closure instead of
+        # doing a full rebuild — but by then page.clean() has already
+        # wiped the page, so that closure just reattaches stale, detached
+        # controls (the sign-in form) with no left hero panel and no
+        # correct window sizing. Clearing it here forces a real rebuild.
+        if self.page.data:
+            self.page.data["auth_active"] = False
+            self.page.data.pop("auth_controller", None)
+        self.navigate_to_login()
+
     def navigate_to_login(self):
         """Navigate to login screen"""
         self._transition_id += 1
@@ -242,11 +259,14 @@ class Navigation:
         self.page.data["auth_active"] = False
         self.page.clean()
         self.page.appbar = None
-        self.page.window_width = 900
-        self.page.window_height = 780
+        self.page.scroll = None
+        self.page.window_width = 1180
+        self.page.window_height = 760
+        self.page.window_min_width = 960
+        self.page.window_min_height = 640
         self.page.padding = 0
-        self.page.bgcolor = "#0f1e30"
-        self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.bgcolor = BG_COLOR
+        self.page.theme_mode = ft.ThemeMode.LIGHT
         self.is_evaluation_mode = False
         self.is_admin_mode = False
         self.app_bar = None
@@ -339,6 +359,7 @@ class Navigation:
             self.page.window_width = 1200
             self.page.window_height = 800
             self.page.padding = 0
+            self.page.scroll = None
             self.page.bgcolor = "#f8fafc"
             self.page.theme_mode = ft.ThemeMode.LIGHT
             self.page.appbar = None

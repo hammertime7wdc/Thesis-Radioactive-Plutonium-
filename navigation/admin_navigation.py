@@ -14,7 +14,7 @@ from utils.utils import (
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BUTTON_SECONDARY_BG, BUTTON_SECONDARY_TEXT,
     BORDER_COLOR
 )
-from services.session_manager import get_current_user
+from services.session_manager import get_current_user, logout as session_logout
 
 # Duration (ms) for the fade-out and fade-in halves of the transition.
 _FADE_MS = 150
@@ -189,7 +189,7 @@ class AdminNavigation:
                             icon_size=20,
                             icon_color=TEXT_TERTIARY,
                             tooltip="Logout",
-                            on_click=lambda e: self.navigate_to_login()
+                            on_click=lambda e: self.logout()
                         ),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -510,6 +510,19 @@ class AdminNavigation:
     def navigate_to_admin(self):
         """Navigate to admin panel (initial entry)"""
         self.navigate_to_users()
+
+    def logout(self):
+        """Sign the user out of Supabase, clear the local session file,
+        then navigate to the login screen."""
+        session_logout()
+        # See navigation.py Navigation.logout() for why this is needed:
+        # a stale page.data["auth_active"]/"auth_controller" makes
+        # login_main() skip its full rebuild and leaves a broken,
+        # left-panel-less login screen.
+        if self.page.data:
+            self.page.data["auth_active"] = False
+            self.page.data.pop("auth_controller", None)
+        self.navigate_to_login()
 
     def navigate_to_login(self):
         from screens.ui_login import main as login_main
