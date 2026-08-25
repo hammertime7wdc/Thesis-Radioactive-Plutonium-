@@ -239,7 +239,7 @@ class AdminNavigation:
                     ft.Container(width=8),
                     create_tab("Submissions", ft.Icons.ARTICLE_OUTLINED, 2),
                     ft.Container(width=8),
-                    create_tab("Settings & Audit", ft.Icons.SETTINGS_OUTLINED, 3),
+                    create_tab("Audit", ft.Icons.SETTINGS_OUTLINED, 3),
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
