@@ -1,3 +1,4 @@
+import os
 import flet as ft
 from utils.utils import (
     BG_COLOR, CARD_BG_COLOR, SECTION_BG_COLOR,
@@ -6,13 +7,71 @@ from utils.utils import (
     BORDER_COLOR, BORDER_COLOR_DARK,
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BUTTON_SECONDARY_BG, BUTTON_SECONDARY_TEXT, BUTTON_SECONDARY_BORDER,
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
-    UPLOAD_BG, UPLOAD_BORDER, UPLOAD_TEXT
+    UPLOAD_BG, UPLOAD_BORDER, UPLOAD_TEXT,
+    ERROR,
 )
+from core.pdf_processor import PDFProcessor
+from core.embeddings import EmbeddingGenerator
+from core.evaluation import Evaluator
+from services.supabase_client import get_supabase_client
+from services.session_manager import get_current_user
+
+# ── Model paths — CODE REPORT track specifically ───────────────────────────
+# theta1/theta2 in qualcheck_final_meta.json were calibrated (Eq. 3.3 grid
+# search) against the SIAMESE model's own cosine-similarity output
+# (model.similarity(), notebook cell 26) — NOT the cross-encoder. The
+# cross-encoder scored higher (WF1 0.898 vs 0.836) and is recorded as
+# "primary_eval" in that same JSON, but it classifies via argmax on its own
+# softmax head and has no cosine-similarity output these thresholds mean
+# anything against. Evaluator only implements the theta-threshold path, so
+# the checkpoint loaded here MUST be the Siamese one (best_model.safetensors),
+# never best_model_crossencoder.safetensors — loading the cross-encoder's
+# weights into EmbeddingGenerator would run without error but produce a
+# meaningless similarity score, since that checkpoint was never trained to
+# make its CLS embedding meaningful for cosine comparison on its own.
+# ── Adjust these two paths to wherever your code-report artifacts actually
+#    live before shipping — placeholders below follow the same layout pattern
+#    as the short-answer checkpoint referenced in EmbeddingGenerator's docstring.
+# codereport_bert/ sits at project root, same level as essay_qualcheck/ and qualcheck_short_answers/
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+CODE_REPORT_MODEL_DIR = os.path.join(_ROOT_DIR, "codereport_bert", "best_model.safetensors")
+CODE_REPORT_META_PATH = os.path.join(_ROOT_DIR, "codereport_bert", "qualcheck_final_meta.json")
+
+# Lazy singletons — BERT + tokenizer load is expensive, load once per process
+# and reuse across evaluations rather than reconstructing per click.
+_embedding_generator = None
+_evaluator = None
+_pdf_processor = PDFProcessor()
+
+
+def _get_evaluator():
+    global _embedding_generator, _evaluator
+    if _evaluator is None:
+        _embedding_generator = EmbeddingGenerator(
+            model_dir=CODE_REPORT_MODEL_DIR,
+            bert_model="bert-base-uncased",
+            max_len_pr=256,  # matches max_len_pr in qualcheck_final_meta.json
+            max_len_r=512,   # matches max_len_r  in qualcheck_final_meta.json —
+                              # code report responses are long, must NOT share
+                              # the P-side's shorter 256-token budget.
+        )
+        _evaluator = Evaluator(_embedding_generator, meta_path=CODE_REPORT_META_PATH)
+    return _evaluator
 
 
 def main(page: ft.Page, nav=None):
     page.title = "QualCheck Evaluation - Code Report"
     page.scroll = ft.ScrollMode.AUTO
+
+    current_user = get_current_user()
+    if not current_user:
+        if nav and hasattr(nav, "navigate_to_login"):
+            nav.navigate_to_login()
+        return
+
+    user_identity = getattr(current_user, "user", current_user)
+    user_id = getattr(user_identity, "id", None)
 
     # Only create app bar if not in evaluation mode (navigation handles it)
     if not nav or not nav.is_evaluation_mode:
@@ -52,7 +111,7 @@ def main(page: ft.Page, nav=None):
             actions=[
                 ft.Row(
                     [
-                        ft.IconButton(ft.Icons.LOGOUT, tooltip="Logout", icon_color=TEXT_PRIMARY, on_click=lambda e: nav.navigate_to_login() if nav else None),
+                        ft.IconButton(ft.Icons.LOGOUT, tooltip="Logout", icon_color=TEXT_PRIMARY, on_click=lambda e: nav.logout() if nav and hasattr(nav, "logout") else (nav.navigate_to_login() if nav else None)),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
@@ -267,6 +326,62 @@ def main(page: ft.Page, nav=None):
         color=TEXT_SECONDARY,
     )
 
+    # --- File picker state -------------------------------------------------
+    # selected_files: list of dicts {"name": display_name, "path": local_path}
+    selected_files: list = []
+
+    selected_files_list = ft.Column(spacing=4)
+
+    def render_selected_files():
+        selected_files_list.controls.clear()
+        for f in selected_files:
+            def make_remove_handler(target=f):
+                def remove_file(e):
+                    if target in selected_files:
+                        selected_files.remove(target)
+                    render_selected_files()
+                    update_evaluate_button_state()
+                    selected_files_list.update()
+                    page.update()
+                return remove_file
+
+            selected_files_list.controls.append(
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=14, color=TEXT_SECONDARY),
+                        ft.Text(f["name"], size=12, color=TEXT_PRIMARY, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_size=14,
+                            icon_color=TEXT_SECONDARY,
+                            tooltip="Remove file",
+                            on_click=make_remove_handler(),
+                        ),
+                    ],
+                    spacing=6,
+                )
+            )
+
+    def on_files_picked(e: ft.FilePickerResultEvent):
+        if e.files:
+            for f in e.files:
+                if f.path and not any(sf["path"] == f.path for sf in selected_files):
+                    selected_files.append({"name": f.name, "path": f.path})
+            render_selected_files()
+            update_evaluate_button_state()
+            selected_files_list.update()
+            page.update()
+
+    file_picker = ft.FilePicker(on_result=on_files_picked)
+    page.overlay.append(file_picker)
+
+    def open_file_picker(e):
+        file_picker.pick_files(
+            dialog_title="Select student PDF submissions",
+            allow_multiple=True,
+            allowed_extensions=["pdf"],
+        )
+
     upload_area = ft.Container(
         content=ft.Column(
             [
@@ -283,11 +398,21 @@ def main(page: ft.Page, nav=None):
         border_radius=12,
         padding=ft.padding.symmetric(vertical=40, horizontal=20),
         alignment=ft.alignment.center,
+        on_click=open_file_picker,
+        ink=True,
     )
 
     responses_section = ft.Container(
         content=ft.Column(
-            [responses_label, ft.Container(height=4), responses_subtitle, ft.Container(height=12), upload_area],
+            [
+                responses_label,
+                ft.Container(height=4),
+                responses_subtitle,
+                ft.Container(height=12),
+                upload_area,
+                ft.Container(height=10),
+                selected_files_list,
+            ],
             spacing=0,
         ),
         padding=ft.padding.all(20),
@@ -298,58 +423,138 @@ def main(page: ft.Page, nav=None):
 
     # --- Evaluate Button ---
     def on_evaluate(e):
-        # TODO: Integrate with core evaluation module
-        # For now, create mock results to demonstrate the studenta_result screen
-        import random
-        
-        # Mock student results
-        mock_results = [
-            {
-                "name": "Student 1",
-                "file": "student_1.pdf",
-                "score": random.uniform(60, 95),
-                "criteria": [
-                    ("Technical Terminology", random.randint(50, 100)),
-                    ("Clarity and Cohesion", random.randint(50, 100)),
-                    ("Constraint Adherence", random.randint(50, 100)),
-                    ("Algorithmic Logic", random.randint(50, 100)),
-                ],
-            },
-            {
-                "name": "Student 2",
-                "file": "student_2.pdf",
-                "score": random.uniform(60, 95),
-                "criteria": [
-                    ("Technical Terminology", random.randint(50, 100)),
-                    ("Clarity and Cohesion", random.randint(50, 100)),
-                    ("Constraint Adherence", random.randint(50, 100)),
-                    ("Algorithmic Logic", random.randint(50, 100)),
-                ],
-            },
-            {
-                "name": "Student 3",
-                "file": "student_3.pdf",
-                "score": random.uniform(60, 95),
-                "criteria": [
-                    ("Technical Terminology", random.randint(50, 100)),
-                    ("Clarity and Cohesion", random.randint(50, 100)),
-                    ("Constraint Adherence", random.randint(50, 100)),
-                    ("Algorithmic Logic", random.randint(50, 100)),
-                ],
-            },
-        ]
-        
-        # Build rubric from form fields
-        rubric = [
+        if not selected_files:
+            return
+
+        # Build rubric from form fields — order matters, this is the exact
+        # order Evaluator.evaluate_response() will label each criterion with,
+        # and the order studenta_result.py renders criterion_row()s in.
+        rubric_pairs = [
             ("Technical Terminology", criterion1_field.value),
             ("Clarity and Cohesion", criterion2_field.value),
             ("Constraint Adherence", criterion3_field.value),
             ("Algorithmic Logic", criterion4_field.value),
         ]
-        
-        # Navigate to results screen
-        if nav and hasattr(nav, 'navigate_to_student_result'):
-            nav.navigate_to_student_result(mock_results, prompt_field.value, rubric)
+        rubric_dict = {name: desc for name, desc in rubric_pairs}
+        question = prompt_field.value or ""
+
+        evaluate_btn.disabled = True
+        evaluate_btn.content = ft.Row(
+            [ft.ProgressRing(width=16, height=16, stroke_width=2, color=BUTTON_PRIMARY_TEXT),
+             ft.Text("Evaluating...", size=15, weight=ft.FontWeight.BOLD)],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8,
+        )
+        evaluate_btn.update()
+
+        def refresh_evaluate_button():
+            evaluate_btn.disabled = False
+            evaluate_btn.content = ft.Row(
+                [ft.Text("> Evaluate Response", size=15, weight=ft.FontWeight.BOLD)],
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+            try:
+                evaluate_btn.update()
+            except AssertionError:
+                # Button was already navigated off-page — nothing to refresh, ignore.
+                pass
+
+        try:
+            evaluator = _get_evaluator()  # loads BERT + weights on first call only
+            supabase = get_supabase_client()
+
+            results = []
+            failed_files = []
+
+            for f in selected_files:
+                if not f["path"]:
+                    # Web build with no local path — desktop-only for now.
+                    failed_files.append(f["name"])
+                    continue
+                try:
+                    response_text = _pdf_processor.extract_text(f["path"])
+                except Exception:
+                    failed_files.append(f["name"])
+                    continue
+
+                if not response_text.strip():
+                    failed_files.append(f["name"])
+                    continue
+
+                # Per-criterion similarity — same call shape as evaluate_response()
+                # for essay; code report shares that architecture (per-criterion
+                # pair-encoding), NOT the short-answer evaluate_combined() shape.
+                criterion_scores = evaluator.evaluate_response(question, response_text, rubric_dict)
+
+                # Weakest-link aggregation for the overall score/verdict, matching
+                # the code-report notebook's per-criterion → weakest-link combination
+                # (see calculate_overall_score(method="min")) rather than a plain mean.
+                overall_similarity = evaluator.calculate_overall_score(criterion_scores, method="min")
+                overall_pct = max(0.0, min(100.0, overall_similarity * 100))
+                overall_label = evaluator.classify(overall_similarity)
+
+                result_record = {
+                    "name": os.path.splitext(f["name"])[0],
+                    "file": f["name"],
+                    "file_path": f["path"],
+                    "score": overall_pct,
+                    "similarity_score": overall_similarity,
+                    "classification": overall_label,
+                    "criteria": [
+                        (name, round(max(0.0, min(100.0, criterion_scores[name]["similarity"] * 100))))
+                        for name, _ in rubric_pairs
+                    ],
+                }
+                results.append(result_record)
+
+                if user_id:
+                    try:
+                        supabase.table("evaluations").insert(
+                            {
+                                "user_id": user_id,
+                                "prompt": question,
+                                "rubric_id": None,
+                                "output_type": "code_report",
+                                "similarity_score": overall_similarity,
+                                "classification": overall_label,
+                                "file_name": f["name"],
+                                "file_path": f["path"],
+                                "criterion_scores": {
+                                    name: round(v["similarity"], 4)
+                                    for name, v in criterion_scores.items()
+                                },
+                            }
+                        ).execute()
+                    except Exception as db_error:
+                        print(f"Failed to save code report evaluation for {f['name']}: {db_error}")
+
+            if failed_files:
+                page.snack_bar = ft.SnackBar(
+                    content=ft.Text(
+                        f"Could not read {len(failed_files)} file(s): "
+                        f"{', '.join(failed_files)}. They were skipped."
+                    ),
+                    bgcolor=ERROR,
+                )
+                page.snack_bar.open = True
+                page.update()
+
+            if results and nav and hasattr(nav, 'navigate_to_student_result'):
+                nav.navigate_to_student_result(
+                    results,
+                    question,
+                    rubric_pairs,
+                    output_type_label="Code Report",
+                    theta1=evaluator.theta1,
+                    theta2=evaluator.theta2,
+                )
+
+        except Exception as ex:
+            page.snack_bar = ft.SnackBar(content=ft.Text(f"Evaluation failed: {ex}"))
+            page.snack_bar.open = True
+            page.update()
+        finally:
+            refresh_evaluate_button()
 
     DISABLED_BG = "#cbd5e1"
     DISABLED_TEXT = "#f8fafc"
@@ -377,6 +582,7 @@ def main(page: ft.Page, nav=None):
             and (criterion2_field.value or "").strip()
             and (criterion3_field.value or "").strip()
             and (criterion4_field.value or "").strip()
+            and selected_files
         )
         evaluate_btn.disabled = not is_valid
         evaluate_btn.style = ft.ButtonStyle(
@@ -384,7 +590,8 @@ def main(page: ft.Page, nav=None):
             color=BUTTON_PRIMARY_TEXT if is_valid else DISABLED_TEXT,
             shape=ft.RoundedRectangleBorder(radius=8),
         )
-        evaluate_btn.update()
+        if getattr(evaluate_btn, "page", None) is not None:
+            evaluate_btn.update()
 
     prompt_field.on_change = update_evaluate_button_state
     criterion1_field.on_change = update_evaluate_button_state

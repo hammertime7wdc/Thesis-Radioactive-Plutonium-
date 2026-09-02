@@ -17,6 +17,8 @@ class EmbeddingGenerator:
         model_dir: str,
         bert_model: str = "bert-base-uncased",
         max_len: int = 128,
+        max_len_pr: int = None,
+        max_len_r: int = None,
         device: str = None,
     ):
         """
@@ -24,10 +26,25 @@ class EmbeddingGenerator:
             model_dir: Path to the .safetensors checkpoint
                        (e.g. qualcheck_short_answers/qualcheck_short_answers_final.safetensors)
             bert_model: Base architecture the checkpoint was fine-tuned from
-            max_len: Max token length (must match training — 128 for short answer)
+            max_len: Max token length used for BOTH sides when max_len_pr/
+                     max_len_r aren't given (matches short-answer training,
+                     which used one shared length — 128).
+            max_len_pr: Max token length for encode_pair() (the P-side:
+                        question+rubric). Overrides max_len for that side only.
+                        Code report training used 256 here (max_len_pr in
+                        qualcheck_final_meta.json) — pass it explicitly for
+                        that track, don't rely on the shared default.
+            max_len_r: Max token length for encode_single() (the R-side:
+                       student response). Overrides max_len for that side only.
+                       Code report training used 512 here (max_len_r in
+                       qualcheck_final_meta.json) — responses are long code
+                       explanations, so this MUST differ from max_len_pr or
+                       long responses get silently truncated inconsistently
+                       with training.
             device: "cuda" / "cpu". Auto-detected if not given.
         """
-        self.max_len = max_len
+        self.max_len_pr = max_len_pr if max_len_pr is not None else max_len
+        self.max_len_r = max_len_r if max_len_r is not None else max_len
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         self.tokenizer, self.model = self._load_base(bert_model)
@@ -105,7 +122,7 @@ class EmbeddingGenerator:
         encoded = self.tokenizer(
             text_a, text_b,
             add_special_tokens=True,
-            max_length=self.max_len,
+            max_length=self.max_len_pr,
             padding="max_length",
             truncation=True,
             return_attention_mask=True,
@@ -125,7 +142,7 @@ class EmbeddingGenerator:
         encoded = self.tokenizer(
             text,
             add_special_tokens=True,
-            max_length=self.max_len,
+            max_length=self.max_len_r,
             padding="max_length",
             truncation=True,
             return_attention_mask=True,
