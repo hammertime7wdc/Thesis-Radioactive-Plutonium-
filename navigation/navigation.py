@@ -78,11 +78,13 @@ class Navigation:
         """Create shared app bar for evaluation screens matching the screenshot design"""
         # Get current user info
         user = get_current_user()
-        user_name = "Google User"
-        user_initials = "GU"
+        user_name = "User"
+        user_initials = "U"
+        avatar_url = ""
         
         if user and user.user:
             email = user.user.email
+            user_id = user.user.id
             # Extract name from email or use email as name
             user_name = email.split("@")[0].replace(".", " ").title()
             # Generate initials
@@ -91,6 +93,58 @@ class Navigation:
                 user_initials = (name_parts[0][0] + name_parts[1][0]).upper()
             else:
                 user_initials = user_name[:2].upper()
+            # Try to load avatar_url and name from profiles
+            try:
+                from services.supabase_client import get_supabase_client
+                supabase = get_supabase_client()
+                profile_resp = (
+                    supabase.table("profiles")
+                    .select("avatar_url, name")
+                    .eq("id", user_id)
+                    .single()
+                    .execute()
+                )
+                if profile_resp.data:
+                    avatar_url = profile_resp.data.get("avatar_url", "") or ""
+                    db_name = profile_resp.data.get("name", "")
+                    if db_name:
+                        user_name = db_name
+                        name_parts = user_name.split()
+                        if len(name_parts) >= 2:
+                            user_initials = (name_parts[0][0] + name_parts[1][0]).upper()
+                        else:
+                            user_initials = user_name[:2].upper()
+            except Exception as _e:
+                print(f"Could not fetch profile for evaluation app bar: {_e}")
+
+        # Build avatar widget: photo if available, else initials circle with visible round border
+        if avatar_url:
+            avatar_widget = ft.Container(
+                content=ft.Image(
+                    src=avatar_url,
+                    width=32,
+                    height=32,
+                    fit=ft.ImageFit.COVER,
+                    border_radius=ft.border_radius.all(16),
+                ),
+                width=34,
+                height=34,
+                border_radius=17,
+                border=ft.border.all(2, PRIMARY_BLUE),
+                bgcolor="#eff6ff",
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                alignment=ft.alignment.center,
+            )
+        else:
+            avatar_widget = ft.Container(
+                content=ft.Text(user_initials, size=12, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
+                width=34,
+                height=34,
+                border_radius=17,
+                border=ft.border.all(2, PRIMARY_BLUE),
+                bgcolor="#eff6ff",
+                alignment=ft.alignment.center,
+            )
         
         logo = ft.Container(
             content=ft.Text("Q", size=20, weight=ft.FontWeight.BOLD, color=TEXT_WHITE),
@@ -180,15 +234,8 @@ class Navigation:
                         ft.Container(
                             content=ft.Row(
                                 [
-                                    # Avatar with initials
-                                    ft.Container(
-                                        content=ft.Text(user_initials, size=12, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
-                                        width=32,
-                                        height=32,
-                                        border_radius=16,
-                                        bgcolor="#eff6ff",
-                                        alignment=ft.alignment.center,
-                                    ),
+                                    # Avatar with photo or initials with visible round border
+                                    avatar_widget,
                                     ft.Container(width=10),
                                     ft.Column(
                                         [

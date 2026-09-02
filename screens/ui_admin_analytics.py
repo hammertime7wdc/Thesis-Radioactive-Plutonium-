@@ -148,11 +148,13 @@ def _empty_chart_placeholder(title, message):
 # ─────────────────────────────────────────────────────────────────
 # Average Score by Criterion — Radar / Spider Chart
 # ─────────────────────────────────────────────────────────────────
-def build_radar_chart(labels, values, max_value=100, size=260):
-    center = size / 2
-    radius = size * 0.34
+def build_radar_chart(labels, values, max_value=100, size=200):
+    margin = 50
+    total_size = size + 2 * margin  # 300 px — similar to pie card height
+    center = total_size / 2
+    radius = size * 0.4
     n = len(labels)
-    rings = 4  # number of concentric grid rings
+    rings = 4
 
     def point(angle_deg, r):
         angle_rad = math.radians(angle_deg)
@@ -161,11 +163,10 @@ def build_radar_chart(labels, values, max_value=100, size=260):
         return x, y
 
     def axis_angle(i):
-        return (360 / n) * i  # 0 = straight up, clockwise
+        return (360 / n) * i
 
     shapes = []
 
-    # Concentric web rings
     for ring in range(1, rings + 1):
         r = radius * ring / rings
         elements = []
@@ -178,13 +179,11 @@ def build_radar_chart(labels, values, max_value=100, size=260):
         shapes.append(cv.Path(elements, paint=ft.Paint(
             style=ft.PaintingStyle.STROKE, stroke_width=1, color=GRID_COLOR)))
 
-    # Axis spokes
     for i in range(n):
         x, y = point(axis_angle(i), radius)
         shapes.append(cv.Line(center, center, x, y,
                                paint=ft.Paint(stroke_width=1, color=GRID_COLOR)))
 
-    # Data polygon
     data_elements = []
     for i in range(n + 1):
         idx = i % n
@@ -199,31 +198,41 @@ def build_radar_chart(labels, values, max_value=100, size=260):
     shapes.append(cv.Path(data_elements, paint=ft.Paint(
         style=ft.PaintingStyle.STROKE, stroke_width=2, color=PRIMARY_BLUE)))
 
-    # Data point dots
     for i in range(n):
         r = radius * (values[i] / max_value)
         x, y = point(axis_angle(i), r)
         shapes.append(cv.Circle(x, y, 3, paint=ft.Paint(
             style=ft.PaintingStyle.FILL, color=PRIMARY_BLUE)))
 
-    canvas = cv.Canvas(shapes, width=size, height=size)
+    canvas = cv.Canvas(shapes, width=total_size, height=total_size)
 
-    # Axis labels, positioned around the outside of the web
+    # Label safety check:
+    # center=150, radius=80, label_radius=80+28=108
+    # leftmost: 150-108=42, left=42-40=2 ✓  rightmost: 150+108=258, right=258+40=298<300 ✓
+    label_width = 80
+    label_height = 34
     label_controls = [ft.Container(canvas)]
-    label_radius = radius + 22
+    label_radius = radius + 28
     for i, label in enumerate(labels):
         x, y = point(axis_angle(i), label_radius)
         label_controls.append(
             ft.Container(
-                content=ft.Text(label, size=12, color=TEXT_SECONDARY),
-                left=x - 30,
-                top=y - 8,
-                width=60,
+                content=ft.Text(
+                    label,
+                    size=11,
+                    color=TEXT_SECONDARY,
+                    text_align=ft.TextAlign.CENTER,
+                    no_wrap=False,
+                ),
+                left=x - label_width / 2,
+                top=y - label_height / 2,
+                width=label_width,
+                height=label_height,
                 alignment=ft.alignment.center,
             )
         )
 
-    stack = ft.Stack(label_controls, width=size, height=size)
+    stack = ft.Stack(label_controls, width=total_size, height=total_size)
 
     return ft.Container(
         content=ft.Column(
@@ -233,6 +242,7 @@ def build_radar_chart(labels, values, max_value=100, size=260):
                 ft.Container(stack, alignment=ft.alignment.center),
             ],
             spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.padding.all(24),
         bgcolor=CARD_BG_COLOR,

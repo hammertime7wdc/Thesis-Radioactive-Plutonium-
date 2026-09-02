@@ -97,21 +97,19 @@ def clear_session():
 def logout():
     """Fully sign the user out: invalidate the Supabase session and
     remove the locally persisted session file.
-
-    This is the function UI logout buttons should call. Previously the
-    logout buttons only swapped the screen back to the login page without
-    ever calling this, so the Supabase client still held a valid session
-    and .session.json was left on disk — meaning the app (or the next
-    person to open it) would get silently logged back in as the same
-    user on the next launch.
     """
-    try:
-        supabase = get_supabase_client()
-        supabase.auth.sign_out()
-    except Exception as e:
-        print(f"Error signing out: {e}")
-    finally:
-        clear_session()
+    def _async_sign_out():
+        try:
+            supabase = get_supabase_client()
+            supabase.auth.sign_out()
+        except Exception as e:
+            print(f"Error signing out: {e}")
+
+    # Immediately clear local session file so UI is logged out instantaneously
+    clear_session()
+    # Perform remote auth sign_out asynchronously in background thread so UI never hangs
+    import threading
+    threading.Thread(target=_async_sign_out, daemon=True).start()
 
 
 def get_current_user():

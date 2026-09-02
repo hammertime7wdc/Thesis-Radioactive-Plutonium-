@@ -88,7 +88,7 @@ def main(page: ft.Page, nav=None):
             actions=[
                 ft.Row(
                     [
-                        ft.IconButton(ft.Icons.LOGOUT, tooltip="Logout", icon_color=TEXT_PRIMARY, on_click=lambda e: nav.navigate_to_login() if nav else None),
+                        ft.IconButton(ft.Icons.LOGOUT, tooltip="Logout", icon_color=TEXT_PRIMARY, on_click=lambda e: nav.logout() if nav and hasattr(nav, "logout") else (nav.navigate_to_login() if nav else None)),
                     ],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),

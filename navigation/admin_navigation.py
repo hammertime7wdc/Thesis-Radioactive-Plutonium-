@@ -45,9 +45,11 @@ class AdminNavigation:
         user = get_current_user()
         user_name = "User"
         user_initials = "U"
+        avatar_url = ""
         
         if user and user.user:
             email = user.user.email
+            user_id = user.user.id
             # Extract name from email or use email as name
             user_name = email.split("@")[0].replace(".", " ").title()
             # Generate initials
@@ -56,6 +58,58 @@ class AdminNavigation:
                 user_initials = (name_parts[0][0] + name_parts[1][0]).upper()
             else:
                 user_initials = user_name[:2].upper()
+            # Try to load avatar_url from profiles
+            try:
+                from services.supabase_client import get_supabase_client
+                supabase = get_supabase_client()
+                profile_resp = (
+                    supabase.table("profiles")
+                    .select("avatar_url, name")
+                    .eq("id", user_id)
+                    .single()
+                    .execute()
+                )
+                if profile_resp.data:
+                    avatar_url = profile_resp.data.get("avatar_url", "") or ""
+                    db_name = profile_resp.data.get("name", "")
+                    if db_name:
+                        user_name = db_name
+                        name_parts = user_name.split()
+                        if len(name_parts) >= 2:
+                            user_initials = (name_parts[0][0] + name_parts[1][0]).upper()
+                        else:
+                            user_initials = user_name[:2].upper()
+            except Exception as _e:
+                print(f"Could not fetch profile for app bar: {_e}")
+        
+        # Build avatar widget: photo if available, else initials circle with visible round border
+        if avatar_url:
+            avatar_widget = ft.Container(
+                content=ft.Image(
+                    src=avatar_url,
+                    width=32,
+                    height=32,
+                    fit=ft.ImageFit.COVER,
+                    border_radius=ft.border_radius.all(16),
+                ),
+                width=34,
+                height=34,
+                border_radius=17,
+                border=ft.border.all(2, PRIMARY_BLUE),
+                bgcolor="#eff6ff",
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                alignment=ft.alignment.center,
+            )
+        else:
+            avatar_widget = ft.Container(
+                content=ft.Text(user_initials, size=12, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
+                width=34,
+                height=34,
+                border_radius=17,
+                border=ft.border.all(2, PRIMARY_BLUE),
+                bgcolor="#eff6ff",
+                alignment=ft.alignment.center,
+            )
         
         logo = ft.Container(
             content=ft.Text("Q", size=20, weight=ft.FontWeight.BOLD, color=TEXT_WHITE),
@@ -156,15 +210,8 @@ class AdminNavigation:
                         ft.Container(
                             content=ft.Row(
                                 [
-                                    # Avatar with initials (AD) - light blue background, blue text
-                                    ft.Container(
-                                        content=ft.Text(user_initials, size=12, weight=ft.FontWeight.BOLD, color=PRIMARY_BLUE),
-                                        width=32,
-                                        height=32,
-                                        border_radius=16,
-                                        bgcolor="#eff6ff",
-                                        alignment=ft.alignment.Alignment(0, 0),
-                                    ),
+                                    # Avatar with photo or initials
+                                    avatar_widget,
                                     ft.Container(width=10),
                                     ft.Column(
                                         [
@@ -514,17 +561,21 @@ class AdminNavigation:
     def logout(self):
         """Sign the user out of Supabase, clear the local session file,
         then navigate to the login screen."""
+        if self.parent_nav:
+            self.parent_nav.logout()
+            return
+
         session_logout()
-        # See navigation.py Navigation.logout() for why this is needed:
-        # a stale page.data["auth_active"]/"auth_controller" makes
-        # login_main() skip its full rebuild and leaves a broken,
-        # left-panel-less login screen.
         if self.page.data:
             self.page.data["auth_active"] = False
             self.page.data.pop("auth_controller", None)
         self.navigate_to_login()
 
     def navigate_to_login(self):
+        if self.parent_nav:
+            self.parent_nav.navigate_to_login()
+            return
+
         from screens.ui_login import main as login_main
         self._transition_id += 1
         
@@ -536,19 +587,25 @@ class AdminNavigation:
             self.page.update()
             time.sleep(0.2)
             
+        if self.page.data is None:
+            self.page.data = {}
+        self.page.data["auth_active"] = False
         self.page.clean()
         self.page.appbar = None
-        self.page.window_width = 900
-        self.page.window_height = 780
+        self.page.scroll = None
+        self.page.window_width = 1180
+        self.page.window_height = 760
+        self.page.window_min_width = 960
+        self.page.window_min_height = 640
         self.page.padding = 0
-        self.page.bgcolor = "#0f1e30"
-        self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.bgcolor = BG_COLOR
+        self.page.theme_mode = ft.ThemeMode.LIGHT
         self.is_evaluation_mode = False
         self.is_admin_mode = False
         self._content_wrapper = None
         # Don't call page.update() with empty page — login_main adds content and updates
         from navigation.navigation import Navigation
-        login_main(self.page, self.parent_nav if self.parent_nav else Navigation(self.page))
+        login_main(self.page, Navigation(self.page))
 
 
 def main(page: ft.Page):
