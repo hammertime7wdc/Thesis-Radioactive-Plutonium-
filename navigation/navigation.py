@@ -130,7 +130,7 @@ class Navigation:
                 width=34,
                 height=34,
                 border_radius=17,
-                border=ft.border.all(2, PRIMARY_BLUE),
+                border=ft.border.all(1, PRIMARY_BLUE),
                 bgcolor="#eff6ff",
                 clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                 alignment=ft.alignment.center,
@@ -141,7 +141,7 @@ class Navigation:
                 width=34,
                 height=34,
                 border_radius=17,
-                border=ft.border.all(2, PRIMARY_BLUE),
+                border=ft.border.all(1, PRIMARY_BLUE),
                 bgcolor="#eff6ff",
                 alignment=ft.alignment.center,
             )
