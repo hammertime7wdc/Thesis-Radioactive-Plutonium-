@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import flet as ft
 from utils.utils import (
     BG_COLOR, CARD_BG_COLOR, SECTION_BG_COLOR,
@@ -7,8 +9,9 @@ from utils.utils import (
     BORDER_COLOR, BORDER_COLOR_DARK,
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BUTTON_SECONDARY_BG, BUTTON_SECONDARY_TEXT, BUTTON_SECONDARY_BORDER,
     INPUT_BG, INPUT_BORDER, INPUT_TEXT, INPUT_HINT,
-    UPLOAD_BG, UPLOAD_BORDER, UPLOAD_TEXT
+    UPLOAD_BG, UPLOAD_BORDER, UPLOAD_TEXT, ERROR
 )
+from widgets.loading_components import EvaluationProgressDialog
 from core.pdf_processor import PDFProcessor
 from core.embeddings import EmbeddingGenerator
 from core.evaluation import Evaluator
@@ -390,6 +393,7 @@ def main(page: ft.Page, nav=None):
             ("Clarity", criterion3_field.value),
         ]
         rubric_criteria = {name: desc for name, desc in rubric}
+        question_text = (prompt_field.value or "").strip()
 
         evaluate_btn.disabled = True
         evaluate_btn.content = ft.Row(
@@ -400,6 +404,12 @@ def main(page: ft.Page, nav=None):
         )
         evaluate_btn.update()
 
+        progress_dialog = EvaluationProgressDialog(
+            title="Evaluating Short Answers",
+            subtitle="BERT Semantic Evaluation in progress...",
+        )
+        progress_dialog.open(page)
+
         def refresh_evaluate_button():
             evaluate_btn.disabled = False
             evaluate_btn.content = ft.Row(
@@ -408,70 +418,103 @@ def main(page: ft.Page, nav=None):
             )
             try:
                 evaluate_btn.update()
-            except AssertionError:
-                # Button was already navigated off-page (nav.navigate_to_student_result
-                # swapped the screen before this ran) — nothing to refresh, ignore.
+            except Exception:
                 pass
 
-        try:
-            evaluator = _get_evaluator()
-            supabase = get_supabase_client()
-
-            results = []
-            for f in selected_files:
-                response_text = _pdf_processor.extract_text(f["path"])
-                scores = evaluator.evaluate_combined(
-                    question=(prompt_field.value or "").strip(),
-                    student_response=response_text,
-                    rubric_criteria=rubric_criteria,
+        def run_evaluation_task():
+            try:
+                progress_dialog.update_progress(
+                    status="Initializing evaluation model...",
+                    detail="Loading neural network weights...",
+                    progress_pct=None,
                 )
+                evaluator = _get_evaluator()
+                supabase = get_supabase_client()
 
-                overall_similarity = evaluator.calculate_overall_score(scores)
-                overall_pct = max(0.0, min(100.0, overall_similarity * 100))
-                classification = evaluator.classify(overall_similarity)
+                results = []
+                total_files = len(selected_files)
+                for idx, f in enumerate(selected_files):
+                    file_name = f.get("name", "Document")
+                    pct = idx / total_files
+                    progress_dialog.update_progress(
+                        status=f"Evaluating response {idx + 1} of {total_files}",
+                        detail=file_name,
+                        progress_pct=pct,
+                    )
 
-                result_record = {
-                    "name": os.path.splitext(f["name"])[0],
-                    "file": f["name"],
-                    "file_path": f["path"],
-                    "score": overall_pct,
-                    "similarity_score": overall_similarity,
-                    "classification": classification,
-                    "criteria": [
-                        (name, round(max(0.0, min(100.0, v["similarity"] * 100))))
-                        for name, v in scores.items()
-                    ],
-                }
+                    response_text = _pdf_processor.extract_text(f["path"])
+                    scores = evaluator.evaluate_combined(
+                        question=question_text,
+                        student_response=response_text,
+                        rubric_criteria=rubric_criteria,
+                    )
 
-                results.append(result_record)
+                    overall_similarity = evaluator.calculate_overall_score(scores)
+                    overall_pct = max(0.0, min(100.0, overall_similarity * 100))
+                    classification = evaluator.classify(overall_similarity)
 
-                if user_id:
-                    try:
-                        supabase.table("evaluations").insert(
-                            {
-                                "user_id": user_id,
-                                "prompt": (prompt_field.value or "").strip(),
-                                "rubric_id": None,
-                                "output_type": "short_answer",
-                                "similarity_score": overall_similarity,
-                                "classification": classification,
-                                "file_name": f["name"],
-                                "file_path": f["path"],
-                                "criterion_scores": {
-                                    name: round(v["similarity"], 4) for name, v in scores.items()
-                                },
-                            }
-                        ).execute()
-                    except Exception as db_error:
-                        print(f"Failed to save short answer evaluation for {f['name']}: {db_error}")
+                    result_record = {
+                        "name": os.path.splitext(f["name"])[0],
+                        "file": f["name"],
+                        "file_path": f["path"],
+                        "score": overall_pct,
+                        "similarity_score": overall_similarity,
+                        "classification": classification,
+                        "criteria": [
+                            (name, round(max(0.0, min(100.0, v["similarity"] * 100))))
+                            for name, v in scores.items()
+                        ],
+                    }
 
-            if nav and hasattr(nav, "navigate_to_student_result"):
-                nav.navigate_to_student_result(
-                    results, prompt_field.value, rubric, output_type_label="Short Answer",
-                    theta1=evaluator.theta1, theta2=evaluator.theta2,
+                    results.append(result_record)
+
+                    if user_id:
+                        try:
+                            supabase.table("evaluations").insert(
+                                {
+                                    "user_id": user_id,
+                                    "prompt": question_text,
+                                    "rubric_id": None,
+                                    "output_type": "short_answer",
+                                    "similarity_score": overall_similarity,
+                                    "classification": classification,
+                                    "file_name": f["name"],
+                                    "file_path": f["path"],
+                                    "criterion_scores": {
+                                        name: round(v["similarity"], 4) for name, v in scores.items()
+                                    },
+                                }
+                            ).execute()
+                        except Exception as db_error:
+                            print(f"Failed to save short answer evaluation for {f['name']}: {db_error}")
+
+                progress_dialog.update_progress(
+                    status="Finalizing results...",
+                    detail="Preparing evaluation summary...",
+                    progress_pct=1.0,
                 )
-        finally:
-            refresh_evaluate_button()
+                time.sleep(0.3)
+                progress_dialog.close()
+
+                if nav and hasattr(nav, "navigate_to_student_result"):
+                    nav.navigate_to_student_result(
+                        results, prompt_field.value, rubric, output_type_label="Short Answer",
+                        theta1=evaluator.theta1, theta2=evaluator.theta2,
+                    )
+            except Exception as ex:
+                print(f"Evaluation error: {ex}")
+                progress_dialog.close()
+                refresh_evaluate_button()
+                page.snack_bar = ft.SnackBar(
+                    content=ft.Text(f"Evaluation failed: {str(ex)}", color=ft.Colors.WHITE),
+                    bgcolor=ERROR,
+                )
+                page.snack_bar.open = True
+                page.update()
+            finally:
+                refresh_evaluate_button()
+
+        threading.Thread(target=run_evaluation_task, daemon=True).start()
 
     DISABLED_BG = "#cbd5e1"
     DISABLED_TEXT = "#f8fafc"
