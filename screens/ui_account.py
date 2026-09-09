@@ -699,6 +699,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         
         department_field_ref = ft.TextField(
             value=state["display_department"],
+            hint_text="e.g. Computer Science",
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -781,7 +782,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                 ft.Row(
                     [
                         ft.Column([
-                            ft.Text("Department", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                            ft.Text("Subject", size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
                             ft.Container(height=4),
                             department_field_ref,
                         ], spacing=0),

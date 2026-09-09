@@ -399,13 +399,23 @@ def build_sign_in_container(page: ft.Page, nav=None, on_go_to_create_account=Non
             supabase.table("profiles")
             .select("role, is_active")
             .eq("id", auth_response.user.id)
-            .single()
             .execute()
         )
-        role = (
-            profile_response.data.get("role", "evaluator") if profile_response.data else "evaluator"
-        )
-        is_active = profile_response.data.get("is_active", True) if profile_response.data else True
+        profile_data = profile_response.data[0] if profile_response.data else None
+        if not profile_data:
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+            error_text.value = "This Google account is not registered in QualCheck. Please contact an administrator."
+            error_text.color = ERROR
+            error_text.visible = True
+            reset_button_fn()
+            page.update()
+            return
+
+        role = profile_data.get("role", "evaluator")
+        is_active = profile_data.get("is_active", True)
         if not is_active:
             try:
                 supabase.auth.sign_out()

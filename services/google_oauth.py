@@ -90,7 +90,10 @@ def sign_in_with_google(timeout_seconds: int = 120):
         oauth_response = supabase.auth.sign_in_with_oauth(
             {
                 "provider": "google",
-                "options": {"redirect_to": REDIRECT_URL},
+                "options": {
+                    "redirect_to": REDIRECT_URL,
+                    "query_params": {"prompt": "select_account"},
+                },
             }
         )
         webbrowser.open(oauth_response.url)
