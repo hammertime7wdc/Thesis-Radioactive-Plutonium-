@@ -161,7 +161,8 @@ def main(page: ft.Page, nav=None):
 
         name_field = styled_field(label="Full Name", hint_text="Juan Dela Cruz", prefix_icon=ft.Icons.PERSON_OUTLINE)
         email_field = styled_field(label="Email Address", hint_text="juan@university.edu.ph", prefix_icon=ft.Icons.MAIL_OUTLINE, keyboard_type=ft.KeyboardType.EMAIL)
-        password_field = styled_field(label="Password", hint_text="Enter password (leave blank to auto-generate)", prefix_icon=ft.Icons.LOCK_OUTLINE, password=True, can_reveal_password=True)
+        password_field = styled_field(label="Password", hint_text="Enter a password", prefix_icon=ft.Icons.LOCK_OUTLINE, password=True, can_reveal_password=True)
+        confirm_password_field = styled_field(label="Confirm Password", hint_text="Re-enter the password", prefix_icon=ft.Icons.LOCK_OUTLINE, password=True, can_reveal_password=True)
 
         password_strength_text = ft.Text("", size=11, color=TEXT_SECONDARY)
         password_requirements = ft.Column(
@@ -230,7 +231,6 @@ def main(page: ft.Page, nav=None):
 
         department_field = styled_field(label="Department / Subject", hint_text="Computer Science", prefix_icon=ft.Icons.SCHOOL_OUTLINED, expand=True)
         institution_field = styled_field(label="Institution", hint_text="e.g. Camarines Sur Polytechnic Colleges", prefix_icon=ft.Icons.APARTMENT_OUTLINED)
-        code_field = styled_field(label="6-Digit Access Code", hint_text="Will be generated on user creation", prefix_icon=ft.Icons.VPN_KEY_OUTLINED, read_only=True, value="")
 
         form_error_banner = ft.Container(
             content=ft.Row(
@@ -256,12 +256,14 @@ def main(page: ft.Page, nav=None):
             name_field.error_text = None
             email_field.error_text = None
             password_field.error_text = None
+            confirm_password_field.error_text = None
             form_error_banner.visible = False
             dialog.update()
 
         name_field.on_change = clear_field_errors
         email_field.on_change = clear_field_errors
         password_field.on_change = clear_field_errors
+        confirm_password_field.on_change = clear_field_errors
 
         submit_btn_text = ft.Text("Add User", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE)
         submit_spinner = ft.ProgressRing(width=14, height=14, stroke_width=2, color=TEXT_WHITE, visible=False)
@@ -277,12 +279,12 @@ def main(page: ft.Page, nav=None):
             name = (name_field.value or "").strip()
             email = (email_field.value or "").strip()
             password = (password_field.value or "").strip()
+            confirm_password = (confirm_password_field.value or "").strip()
             role = role_dropdown.value
             department = (department_field.value or "").strip()
             institution = (institution_field.value or "").strip()
 
-            import random
-            access_code = str(random.randint(100000, 999999))
+            access_code = None
 
             has_error = False
             if not name:
@@ -294,7 +296,10 @@ def main(page: ft.Page, nav=None):
             elif "@" not in email or "." not in (email.split("@")[-1] if isinstance(email, str) else ""):
                 email_field.error_text = "Enter a valid email address"
                 has_error = True
-            if password and len(password) < 8:
+            if not password:
+                password_field.error_text = "Password is required"
+                has_error = True
+            elif len(password) < 8:
                 password_field.error_text = "Password must be at least 8 characters"
                 has_error = True
             elif password and not any(c.isupper() for c in password):
@@ -305,6 +310,12 @@ def main(page: ft.Page, nav=None):
                 has_error = True
             elif password and not any(c in '!@#$%^&*(),.?":{}|<>' for c in password):
                 password_field.error_text = "Password must contain at least 1 special character"
+                has_error = True
+            if not confirm_password:
+                confirm_password_field.error_text = "Please confirm the password"
+                has_error = True
+            elif password != confirm_password:
+                confirm_password_field.error_text = "Passwords do not match"
                 has_error = True
 
             if has_error:
@@ -414,6 +425,8 @@ def main(page: ft.Page, nav=None):
                 password_strength_text,
                 ft.Container(height=8),
                 password_requirements,
+                ft.Container(height=12),
+                confirm_password_field,
                 ft.Container(height=20),
                 ft.Divider(height=1, color=BORDER_COLOR),
                 ft.Container(height=20),
@@ -422,8 +435,6 @@ def main(page: ft.Page, nav=None):
                 ft.Row([role_dropdown, ft.Container(width=12), department_field]),
                 ft.Container(height=12),
                 institution_field,
-                ft.Container(height=12),
-                code_field,
                 ft.Container(height=24),
                 ft.Row([ft.Container(expand=True), cancel_btn, ft.Container(width=10), add_btn]),
             ],

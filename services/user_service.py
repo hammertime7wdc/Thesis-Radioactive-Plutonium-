@@ -49,7 +49,7 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
         name: User's full name
         department: User's department
         institution: User's institution
-        password: Optional password (auto-generated if not provided)
+        password: Password chosen by the administrator
         access_code: 6-digit access code for the user
     
     Returns:
@@ -64,14 +64,17 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
         if existing_user.data:
             return {'success': False, 'message': f'User with email {email} already exists'}
         
-        # Use provided password or generate a secure one following auth.py rules
-        if password:
-            temp_password = password
-        else:
-            temp_password = generate_secure_password(12)
+        if not password:
+            return {'success': False, 'message': 'Password is required'}
+
+        temp_password = password
         
-        # Set access code expiration (30 minutes from now)
-        access_code_expires_at = datetime.now() + timedelta(minutes=30)
+        # Access codes are only used for evaluator onboarding.
+        access_code_expires_at = (
+            datetime.now() + timedelta(minutes=30)
+            if access_code
+            else None
+        )
         
         # Create user in Supabase Auth using admin API
         auth_response = supabase.auth.admin.create_user({
@@ -93,7 +96,7 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
                 'department': department,
                 'institution': institution,
                 'access_code': access_code,
-                'access_code_expires_at': access_code_expires_at.isoformat()
+                'access_code_expires_at': access_code_expires_at.isoformat() if access_code_expires_at else None
             }
             # Remove None values
             user_data = {k: v for k, v in user_data.items() if v is not None}
@@ -108,7 +111,7 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
                 'department': department,
                 'institution': institution,
                 'access_code': access_code,
-                'access_code_expires_at': access_code_expires_at.isoformat()
+                'access_code_expires_at': access_code_expires_at.isoformat() if access_code_expires_at else None
             }
             # Remove None values
             user_data = {k: v for k, v in user_data.items() if v is not None}
