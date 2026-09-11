@@ -48,6 +48,7 @@ from utils.utils import (
     SUCCESS,
 )
 from utils.resend_control import build_resend_code_control
+from widgets.snackbar import show_snackbar
 
 
 def main(page: ft.Page, nav=None, role="evaluator"):
@@ -332,6 +333,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             profile_message.value = "Profile changes saved."
             profile_message.visible = True
             profile_message.color = SUCCESS
+            show_snackbar(page, "Profile changes saved.")
             set_profile_save_button_loading(False)
             page.update()
         except Exception as ex:

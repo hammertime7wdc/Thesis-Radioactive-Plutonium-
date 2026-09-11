@@ -17,6 +17,7 @@ from services.login_lockout import (
     format_lockout_message,
 )
 from services.google_oauth import sign_in_with_google
+from widgets.snackbar import show_snackbar
 from utils.utils import (
     BG_COLOR,
     CARD_BG_COLOR,
@@ -452,15 +453,19 @@ def build_sign_in_container(page: ft.Page, nav=None, on_go_to_create_account=Non
                 time.sleep(0.2)
                 if role == "admin":
                     nav.navigate_to_admin()
+                    show_snackbar(page, "Signed in successfully.")
                 elif role == "evaluator":
                     nav.navigate_to_short_answer()
+                    show_snackbar(page, "Signed in successfully.")
 
             threading.Thread(target=fade_and_navigate, daemon=True).start()
         else:
             if role == "admin":
                 nav.navigate_to_admin()
+                show_snackbar(page, "Signed in successfully.")
             elif role == "evaluator":
                 nav.navigate_to_short_answer()
+                show_snackbar(page, "Signed in successfully.")
             else:
                 error_text.value = "Invalid user role."
                 error_text.color = ERROR

@@ -15,6 +15,7 @@ from utils.utils import (
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BORDER_COLOR
 )
 from services.session_manager import get_current_user, get_user_role, logout as session_logout
+from widgets.snackbar import show_snackbar
 
 # Duration (ms) for the fade-out and fade-in halves of the transition.
 _FADE_MS = 150
@@ -288,6 +289,7 @@ class Navigation:
             self.page.data["auth_active"] = False
             self.page.data.pop("auth_controller", None)
         self.navigate_to_login()
+        show_snackbar(self.page, "Signed out successfully.")
 
     def navigate_to_login(self):
         """Navigate to login screen"""

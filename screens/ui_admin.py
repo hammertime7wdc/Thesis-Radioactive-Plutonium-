@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import flet as ft
 
 from screens.admin_user_card import build_user_cards
+from widgets.snackbar import show_snackbar
 from services.user_service import add_user
 from services.admin_user_service import (
     fetch_users_with_evaluations,
@@ -96,28 +97,23 @@ def main(page: ft.Page, nav=None):
 
         # Keep the in-memory list in sync so filters/pill counts are correct
         user["is_active"] = new_value
+        show_snackbar(page, "Account status updated.")
         rebuild_table()
 
     def handle_delete_user(user):
         success, message = delete_user(user["id"])
 
         if not success:
-            page.snack_bar = ft.SnackBar(
-                ft.Text(message or "Failed to delete user.", color=TEXT_WHITE),
-                bgcolor=ERROR,
-            )
-            page.snack_bar.open = True
+            if user.get("evaluations_count", 0) > 0:
+                message = "This user has evaluations and cannot be deleted. Disable the account instead."
+            show_snackbar(page, message or "Failed to delete user.", ERROR)
             page.update()
             return
 
         # Remove from the in-memory list so the grid and pill counts update
         users_data[:] = [u for u in users_data if u["id"] != user["id"]]
 
-        page.snack_bar = ft.SnackBar(
-            ft.Text(f"{user.get('email', 'User')} was deleted.", color=TEXT_WHITE),
-            bgcolor=SUCCESS,
-        )
-        page.snack_bar.open = True
+        show_snackbar(page, f"{user.get('email', 'User')} was deleted.")
         rebuild_table()
 
     def format_created_at(created_at):
@@ -277,7 +273,7 @@ def main(page: ft.Page, nav=None):
 
         def on_submit(e):
             name = (name_field.value or "").strip()
-            email = (email_field.value or "").strip()
+            email = (email_field.value or "").strip().lower()
             password = (password_field.value or "").strip()
             confirm_password = (confirm_password_field.value or "").strip()
             role = role_dropdown.value
@@ -334,11 +330,7 @@ def main(page: ft.Page, nav=None):
 
             if result.get('success'):
                 page.close(dialog)
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(result.get('message', 'User added successfully'), color=TEXT_WHITE),
-                    bgcolor=SUCCESS,
-                )
-                page.snack_bar.open = True
+                show_snackbar(page, result.get('message', 'User added successfully'))
                 page.update()
                 if nav:
                     nav.navigate_to_users()

@@ -55,6 +55,8 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
     Returns:
         Dictionary with success status and message
     """
+    email = (email or '').strip().lower()
+
     try:
         # Use service client for admin operations
         supabase = get_supabase_service_client()
@@ -153,15 +155,21 @@ def add_user(email: str, role: str = 'evaluator', name: str = None, department: 
             print(f"Failed to send welcome email: {email_error}")
             # Continue even if email fails - user is still created
         
+        role_label = "Administrator" if role == "admin" else "Evaluator"
         return {
             'success': True, 
-            'message': f'User {email} added successfully. Temporary password: {temp_password}', 
+            'message': f'{role_label} account created successfully.',
             'data': result.data[0],
             'temp_password': temp_password
         }
         
     except Exception as e:
         print(f"Error adding user: {e}")
+        if "already registered" in str(e).lower() or "already exists" in str(e).lower():
+            return {
+                'success': False,
+                'message': 'An account with this email already exists. Email addresses are not case-sensitive.'
+            }
         return {'success': False, 'message': f'Error adding user: {str(e)}'}
 
 
