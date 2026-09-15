@@ -119,7 +119,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         state["profile_data"] = p_data
         state["is_admin"] = p_data.get("role", "evaluator") == "admin"
         state["display_name"] = p_data.get("name", "User")
-        state["display_email"] = p_data.get("email", user_email)
+        state["display_email"] = user_email
         state["display_department"] = p_data.get("department", "")
         state["display_institution"] = p_data.get("institution", "")
         state["display_bio"] = p_data.get("bio", "")
@@ -298,7 +298,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
     def update_profile(e):
         # Get values from form fields (direct TextField references)
         new_name = name_field_ref.value if name_field_ref else state["display_name"]
-        new_email = email_field_ref.value if email_field_ref else state["display_email"]
         new_department = department_field_ref.value if department_field_ref else state["display_department"]
         new_institution = institution_field_ref.value if institution_field_ref else state["display_institution"]
         new_bio = bio_field_ref.value if bio_field_ref else state["display_bio"]
@@ -308,7 +307,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             supabase = get_supabase_client()
             update_data = {
                 "name": new_name,
-                "email": new_email,
                 "department": new_department,
                 "institution": new_institution,
                 "bio": new_bio
@@ -322,7 +320,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
 
             # Update display variables after successful save
             state["display_name"] = new_name
-            state["display_email"] = new_email
             state["display_department"] = new_department
             state["display_institution"] = new_institution
             state["display_bio"] = new_bio
@@ -689,6 +686,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         
         email_field_ref = ft.TextField(
             value=state["display_email"],
+            read_only=True,
             width=290,
             border_radius=8,
             bgcolor=INPUT_BG,
@@ -739,7 +737,6 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
         )
         name_field_ref.on_submit = update_profile
-        email_field_ref.on_submit = update_profile
         department_field_ref.on_submit = update_profile
         institution_field_ref.on_submit = update_profile
         bio_field_ref.on_submit = update_profile
