@@ -33,7 +33,11 @@ def _fetch_user_evaluations(user_id: str) -> list:
     try:
         resp = (
             supabase.table("evaluations")
-            .select("*")
+            .select(
+                "id, prompt, rubric_details, criterion_scores, "
+                "file_name, file_path, similarity_score, classification, "
+                "output_type, created_at"
+            )
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .execute()
@@ -99,6 +103,39 @@ def _classify_score(score_pct: float) -> str:
     return "Irrelevant"
 
 
+def _saved_evaluation_to_result(evaluation: dict) -> tuple[dict, list[tuple[str, str]]]:
+    """Convert a stored evaluation row to the detailed-results screen shape."""
+    similarity_score = _normalize_similarity_score(evaluation.get("similarity_score")) or 0.0
+    criterion_scores = evaluation.get("criterion_scores") or {}
+    criteria = []
+    for name, value in criterion_scores.items():
+        normalized = _normalize_similarity_score(value) or 0.0
+        criteria.append((name, round(max(0.0, min(100.0, normalized * 100)))))
+
+    rubric_details = evaluation.get("rubric_details") or []
+    if isinstance(rubric_details, dict):
+        rubric_details = [
+            {"name": name, "description": description}
+            for name, description in rubric_details.items()
+        ]
+    rubric = [
+        (item.get("name", "Criterion"), item.get("description", ""))
+        for item in rubric_details
+        if isinstance(item, dict)
+    ]
+
+    result = {
+        "name": evaluation.get("file_name") or "Untitled",
+        "file": evaluation.get("file_name") or "Untitled",
+        "file_path": evaluation.get("file_path") or "",
+        "score": similarity_score * 100,
+        "similarity_score": similarity_score,
+        "classification": evaluation.get("classification") or _classify_score(similarity_score * 100),
+        "criteria": criteria,
+    }
+    return result, rubric
+
+
 def _build_live_evaluations(nav) -> list:
     if not nav:
         return []
@@ -108,6 +145,7 @@ def _build_live_evaluations(nav) -> list:
         return []
 
     prompt = getattr(nav, "evaluation_prompt", "") or ""
+    rubric = getattr(nav, "evaluation_rubric", None) or []
     output_type_label = getattr(nav, "evaluation_output_type_label", "Short Answer") or "Short Answer"
     output_type_key = OUTPUT_TYPE_KEYS.get(output_type_label, "short_answer")
 
@@ -130,6 +168,14 @@ def _build_live_evaluations(nav) -> list:
                 "classification": result.get("classification") or _classify_score(score_pct),
                 "created_at": "just now",
                 "source": "live",
+                "criterion_scores": {
+                    name: value / 100
+                    for name, value in result.get("criteria", [])
+                },
+                "rubric_details": [
+                    {"name": name, "description": description}
+                    for name, description in rubric
+                ],
             }
         )
 
@@ -377,8 +423,136 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         sim_pct = max(0.0, min(100.0, sim * 100)) if sim is not None else None
         output_type_label = OUTPUT_TYPE_LABELS.get(evaluation.get("output_type"), evaluation.get("output_type") or "—")
         title = evaluation.get("file_name") or (evaluation.get("prompt") or "")[:60] or "Untitled"
+        result, rubric = _saved_evaluation_to_result(evaluation)
+        expanded = {"value": False}
+        arrow_icon = ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=18, color=TEXT_SECONDARY)
 
-        return ft.Container(
+        criterion_rows = []
+        for criterion_name, criterion_pct in result["criteria"]:
+            criterion_color = (
+                SUCCESS if criterion_pct >= 75
+                else WARNING if criterion_pct >= 50
+                else ERROR
+            )
+            criterion_rows.append(
+                ft.Row(
+                    [
+                        ft.Text(criterion_name, size=12, color=TEXT_SECONDARY, width=170),
+                        ft.ProgressBar(
+                            value=criterion_pct / 100,
+                            bgcolor=SECTION_BG_COLOR,
+                            color=criterion_color,
+                            height=7,
+                            border_radius=4,
+                            expand=True,
+                        ),
+                        ft.Text(
+                            f"{criterion_pct}%",
+                            size=12,
+                            color=TEXT_SECONDARY,
+                            width=42,
+                            text_align=ft.TextAlign.RIGHT,
+                        ),
+                    ],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            )
+
+        rubric_rows = [
+            ft.Row(
+                [
+                    ft.Text(name, size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY, width=170),
+                    ft.Text(description or "No description", size=12, color=TEXT_SECONDARY, expand=True),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            )
+            for name, description in rubric
+        ]
+        if not rubric_rows:
+            rubric_rows = [ft.Text("Rubric details are unavailable for this older evaluation.", size=12, color=TEXT_TERTIARY)]
+
+        detail_panel = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Container(
+                                content=ft.Column(
+                                    [
+                                        ft.Text(
+                                            f"{result['score']:.1f}%",
+                                            size=28,
+                                            weight=ft.FontWeight.BOLD,
+                                            color=classification_badge(evaluation.get("classification")).content.color,
+                                        ),
+                                        ft.Text(
+                                            evaluation.get("classification") or "—",
+                                            size=12,
+                                            weight=ft.FontWeight.W_600,
+                                            color=classification_badge(evaluation.get("classification")).content.color,
+                                        ),
+                                        ft.Text("Similarity Score", size=11, color=TEXT_SECONDARY),
+                                    ],
+                                    spacing=2,
+                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                bgcolor=SECTION_BG_COLOR,
+                                border_radius=10,
+                                padding=16,
+                                width=150,
+                                alignment=ft.alignment.center,
+                            ),
+                            ft.Column(
+                                [
+                                    ft.Text("CRITERION SCORES", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                                    ft.Container(height=8),
+                                    ft.Column(criterion_rows or [ft.Text("No criterion scores saved.", size=12, color=TEXT_TERTIARY)], spacing=9),
+                                ],
+                                spacing=0,
+                                expand=True,
+                            ),
+                        ],
+                        spacing=20,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
+                    ),
+                    ft.Divider(height=1, color=BORDER_COLOR),
+                    ft.Column(
+                        [
+                            ft.Text("QUESTION", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                            ft.Text(evaluation.get("prompt") or "No question saved.", size=12, color=TEXT_PRIMARY),
+                        ],
+                        spacing=6,
+                    ),
+                    ft.Column(
+                        [
+                            ft.Text("RUBRIC", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                            ft.Column(rubric_rows, spacing=7),
+                        ],
+                        spacing=6,
+                    ),
+                ],
+                spacing=14,
+            ),
+            bgcolor="#f1f5f9",
+            border_radius=10,
+            padding=16,
+            margin=ft.margin.only(top=4, bottom=8),
+            visible=False,
+        )
+
+        def toggle_details(e):
+            expanded["value"] = not expanded["value"]
+            detail_panel.visible = expanded["value"]
+            arrow_icon.name = (
+                ft.Icons.KEYBOARD_ARROW_UP
+                if expanded["value"]
+                else ft.Icons.KEYBOARD_ARROW_DOWN
+            )
+            page.update()
+
+        summary_row = ft.Container(
             content=ft.Row(
                 [
                     ft.Container(
@@ -403,12 +577,18 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                         text_align=ft.TextAlign.RIGHT,
                     ),
                     classification_badge(evaluation.get("classification")),
+                    arrow_icon,
                 ],
                 spacing=12,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             padding=ft.padding.symmetric(vertical=10),
+            on_click=toggle_details,
+            ink=True,
+            tooltip="View evaluation details",
         )
+
+        return ft.Column([summary_row, detail_panel], spacing=0)
 
     # --- Search + filter state (same pattern as ui_admin_submissions.py) ---
     history_state = {"query": "", "classification": "all"}

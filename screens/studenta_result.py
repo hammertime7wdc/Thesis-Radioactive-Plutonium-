@@ -92,7 +92,10 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
     # -----------------------------------------------------------------
     def go_back(e):
         if nav:
-            if hasattr(nav, "navigate_to_new_evaluation"):
+            if getattr(nav, "evaluation_return_view", "new_evaluation") == "dashboard" and hasattr(nav, "navigate_to_dashboard"):
+                nav.evaluation_return_view = "new_evaluation"
+                nav.navigate_to_dashboard()
+            elif hasattr(nav, "navigate_to_new_evaluation"):
                 nav.navigate_to_new_evaluation()
             else:
                 nav.navigate_to_short_answer()

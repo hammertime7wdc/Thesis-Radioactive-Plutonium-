@@ -91,7 +91,7 @@ def main(page: ft.Page, nav=None):
             return ft.DataCell(classification_badge(labels[0]))
         return ft.DataCell(ft.Column([classification_badge(l) for l in labels], spacing=2))
 
-    def file_cell(name):
+    def file_cell(name, on_tap=None):
         return ft.DataCell(
             ft.Row(
                 [
@@ -100,27 +100,135 @@ def main(page: ft.Page, nav=None):
                     ft.Text(name, size=13, color=TEXT_PRIMARY),
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            on_tap=on_tap,
+        )
+
+    def build_submission_item(item):
+        score_value = item.get("score", "—")
+        classification = item.get("classification", ["Unclassified"])
+        classification = classification[0] if isinstance(classification, list) else classification
+        classification_colors = {
+            "Fully Relevant": SUCCESS,
+            "Partially Relevant": WARNING,
+            "Irrelevant": ERROR,
+        }
+        score_color = classification_colors.get(classification, PRIMARY_BLUE)
+
+        criterion_rows = []
+        for name, value in (item.get("criterion_scores") or {}).items():
+            try:
+                score_pct = float(value) * 100 if float(value) <= 1 else float(value)
+            except (TypeError, ValueError):
+                continue
+            criterion_color = SUCCESS if score_pct >= 75 else WARNING if score_pct >= 50 else ERROR
+            criterion_rows.append(
+                ft.Row(
+                    [
+                        ft.Text(name, size=12, color=TEXT_SECONDARY, width=160),
+                        ft.ProgressBar(
+                            value=max(0, min(100, score_pct)) / 100,
+                            bgcolor=SECTION_BG_COLOR,
+                            color=criterion_color,
+                            height=7,
+                            border_radius=4,
+                            expand=True,
+                        ),
+                        ft.Text(f"{score_pct:.0f}%", size=12, color=TEXT_SECONDARY, width=42),
+                    ],
+                    spacing=10,
+                )
             )
-        )
 
-    def build_row(item):
-        return ft.DataRow(
-            cells=[
-                file_cell(item["file"]),
-                ft.DataCell(ft.Text(item["score"], size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE)),
-                classification_cell(item["classification"]),
-                ft.DataCell(ft.Text(item["type"], size=13, color=TEXT_SECONDARY)),
-                ft.DataCell(ft.Text(item["evaluator"], size=13, color=TEXT_SECONDARY)),
-                ft.DataCell(ft.Text(item["date"], size=13, color=TEXT_SECONDARY)),
-            ],
-        )
-
-    def empty_row(msg="No submissions found"):
-        return [
-            ft.DataRow(cells=[
-                ft.DataCell(ft.Text(msg, color=TEXT_SECONDARY)),
-            ] + [ft.DataCell(ft.Text("")) for _ in range(5)])
+        rubric_details = item.get("rubric_details") or []
+        if isinstance(rubric_details, dict):
+            rubric_details = [
+                {"name": name, "description": description}
+                for name, description in rubric_details.items()
+            ]
+        rubric_rows = [
+            ft.Row(
+                [
+                    ft.Text(entry.get("name", "Criterion"), size=12, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY, width=160),
+                    ft.Text(entry.get("description", "No description"), size=12, color=TEXT_SECONDARY, expand=True),
+                ],
+                spacing=10,
+            )
+            for entry in rubric_details
+            if isinstance(entry, dict)
         ]
+        if not rubric_rows:
+            rubric_rows = [ft.Text("Rubric details unavailable for this evaluation.", size=12, color=TEXT_TERTIARY)]
+
+        expanded = {"value": False}
+        arrow_icon = ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=18, color=TEXT_SECONDARY)
+
+        detail_panel = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(score_value, size=28, weight=ft.FontWeight.BOLD, color=score_color),
+                            classification_badge(classification),
+                            ft.Text(item.get("type", "—"), size=12, color=TEXT_TERTIARY),
+                        ],
+                        spacing=12,
+                    ),
+                    ft.Divider(height=1, color=BORDER_COLOR),
+                    ft.Text("QUESTION", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                    ft.Text(item.get("prompt") or "No question saved.", size=13, color=TEXT_PRIMARY),
+                    ft.Text("CRITERION SCORES", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                    ft.Column(criterion_rows or [ft.Text("No criterion scores saved.", size=12, color=TEXT_TERTIARY)], spacing=9),
+                    ft.Text("RUBRIC", size=11, color=TEXT_TERTIARY, weight=ft.FontWeight.BOLD),
+                    ft.Column(rubric_rows, spacing=7),
+                ],
+                spacing=10,
+            ),
+            bgcolor=SECTION_BG_COLOR,
+            border_radius=10,
+            padding=16,
+            margin=ft.margin.only(top=4, bottom=8),
+            visible=False,
+        )
+
+        def toggle_details(e):
+            expanded["value"] = not expanded["value"]
+            detail_panel.visible = expanded["value"]
+            arrow_icon.name = (
+                ft.Icons.KEYBOARD_ARROW_UP
+                if expanded["value"]
+                else ft.Icons.KEYBOARD_ARROW_DOWN
+            )
+            page.update()
+
+        summary_row = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=18, color=TEXT_TERTIARY),
+                    ft.Text(item["file"], size=13, color=TEXT_PRIMARY, expand=True),
+                    ft.Text(item["score"], size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE, width=60),
+                    classification_badge(classification),
+                    ft.Text(item["type"], size=13, color=TEXT_SECONDARY, width=100),
+                    ft.Text(item["evaluator"], size=13, color=TEXT_SECONDARY, width=120),
+                    ft.Text(item["date"], size=13, color=TEXT_SECONDARY, width=120),
+                    arrow_icon,
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.padding.symmetric(horizontal=16, vertical=14),
+            on_click=toggle_details,
+            ink=True,
+            tooltip="View submission details",
+        )
+        return ft.Column([summary_row, detail_panel], spacing=0)
+
+    def empty_submission_state(msg="No submissions found"):
+        return ft.Container(
+            content=ft.Text(msg, color=TEXT_SECONDARY),
+            padding=ft.padding.all(24),
+            alignment=ft.alignment.center,
+        )
 
     # --- Search + Classification Filter state ---
     search_state = {"query": "", "classification": "all"}
@@ -140,7 +248,7 @@ def main(page: ft.Page, nav=None):
     def rebuild_rows(e=None):
         style_filter_pills()
         filtered = get_filtered_data()
-        submissions_table.rows = [build_row(item) for item in filtered] if filtered else empty_row()
+        submissions_list.controls = [build_submission_item(item) for item in filtered] if filtered else [empty_submission_state()]
         page.update()
 
     # --- Search bar ---
@@ -274,31 +382,35 @@ def main(page: ft.Page, nav=None):
         padding=ft.padding.symmetric(horizontal=24, vertical=16),
     )
 
-    # --- Submissions Table ---
-    submissions_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("STUDENT FILE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("SCORE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("CLASSIFICATION", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-            ft.DataColumn(ft.Text("DATE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY)),
-        ],
-        border=ft.border.all(1, BORDER_COLOR),
-        border_radius=8,
-        horizontal_lines=ft.border.BorderSide(1, BORDER_COLOR),
-        vertical_lines=None,
-        column_spacing=54,
-        heading_row_color=SECTION_BG_COLOR,
-        data_row_min_height=56,
-        show_bottom_border=True,
-        rows=[build_row(item) for item in SUBMISSIONS_DATA] if SUBMISSIONS_DATA else empty_row(),
+    # --- Expandable submissions list ---
+    submissions_header = ft.Container(
+        content=ft.Row(
+            [
+                ft.Text("STUDENT FILE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, expand=True),
+                ft.Text("SCORE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=60),
+                ft.Text("CLASSIFICATION", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=125),
+                ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=100),
+                ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=120),
+                ft.Text("DATE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=120),
+                ft.Container(width=18),
+            ],
+            spacing=12,
+        ),
+        bgcolor=SECTION_BG_COLOR,
+        padding=ft.padding.symmetric(horizontal=16, vertical=14),
+    )
+
+    submissions_list = ft.ListView(
+        controls=[build_submission_item(item) for item in SUBMISSIONS_DATA] if SUBMISSIONS_DATA else [empty_submission_state()],
+        spacing=0,
+        height=420,
+        auto_scroll=False,
     )
 
     table_scroll_view = ft.ListView(
-        controls=[submissions_table],
+        controls=[submissions_header, submissions_list],
         spacing=0,
-        height=420,
+        height=480,
         auto_scroll=False,
     )
 

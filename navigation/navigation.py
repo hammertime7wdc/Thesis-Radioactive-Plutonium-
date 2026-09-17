@@ -36,6 +36,7 @@ class Navigation:
         self.evaluation_results = None  # Store evaluation results
         self.evaluation_prompt = None  # Store academic prompt
         self.evaluation_rubric = None  # Store rubric
+        self.evaluation_return_view = "new_evaluation"
         # Persistent wrapper that stays on the page; its content is swapped during navigation.
         self._content_wrapper = None
         # Transition ID to prevent race conditions during navigation

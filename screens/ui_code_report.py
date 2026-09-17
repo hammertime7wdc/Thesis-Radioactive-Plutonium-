@@ -539,6 +539,10 @@ def main(page: ft.Page, nav=None):
                                         name: round(v["similarity"], 4)
                                         for name, v in criterion_scores.items()
                                     },
+                                    "rubric_details": [
+                                        {"name": name, "description": description}
+                                        for name, description in rubric_pairs
+                                    ],
                                 }
                             ).execute()
                         except Exception as db_error:

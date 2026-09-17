@@ -19,7 +19,7 @@ def fetch_submissions():
     try:
         resp = (
             supabase.table("evaluations")
-            .select("id, file_name, similarity_score, classification, output_type, created_at, user_id, profiles(name)")
+            .select("id, prompt, rubric_details, criterion_scores, file_name, similarity_score, classification, output_type, created_at, user_id, profiles(name)")
             .order("created_at", desc=True)
             .execute()
         )
@@ -38,5 +38,8 @@ def fetch_submissions():
             "type": TYPE_LABELS.get(r.get("output_type"), r.get("output_type") or "—"),
             "evaluator": evaluator_name,
             "date": (r.get("created_at") or "")[:16].replace("T", " "),
+            "prompt": r.get("prompt") or "",
+            "rubric_details": r.get("rubric_details") or [],
+            "criterion_scores": r.get("criterion_scores") or {},
         })
     return submissions
