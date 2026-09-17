@@ -84,6 +84,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT T
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_code TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_code_expires_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.evaluations ADD COLUMN IF NOT EXISTS criterion_scores JSONB;
+ALTER TABLE public.evaluations ADD COLUMN IF NOT EXISTS rubric_details JSONB;
 
 UPDATE public.profiles
 SET is_active = TRUE
