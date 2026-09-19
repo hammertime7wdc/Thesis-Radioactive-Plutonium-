@@ -5,7 +5,17 @@ All Supabase reads/writes related to user profiles live here so the
 screen module only has to deal with rendering and user interaction.
 """
 
+from services.audit_service import log_audit_entry
+from services.session_manager import get_current_user
 from services.supabase_client import get_supabase_client, get_supabase_service_client
+
+
+def _get_actor_email() -> str:
+    """Return the authenticated administrator's email for audit records."""
+    current_user = get_current_user()
+    if current_user and getattr(current_user, "user", None):
+        return getattr(current_user.user, "email", None) or "admin@qualcheck.edu"
+    return "admin@qualcheck.edu"
 
 
 def fetch_users_with_evaluations() -> list[dict]:
@@ -73,6 +83,17 @@ def set_user_active_status(user_id: str, is_active: bool) -> bool:
             print(f"Warning: no profile row updated for user {user_id}")
             return False
 
+        target_profile = result.data[0]
+        log_audit_entry(
+            actor_email=_get_actor_email(),
+            action="Disabled user" if not is_active else "Enabled user",
+            detail={
+                "user_id": user_id,
+                "user_email": target_profile.get("email", ""),
+                "is_active": is_active,
+                "role": target_profile.get("role", ""),
+            },
+        )
         return True
     except Exception as e:
         print(f"Error updating user status for {user_id}: {e}")
@@ -95,6 +116,15 @@ def delete_user(user_id: str) -> tuple[bool, str]:
     try:
         supabase_admin = get_supabase_service_client()
 
+        profile_response = (
+            supabase_admin.table("profiles")
+            .select("email, role")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        user_profile = profile_response.data or {}
+
         eval_response = (
             supabase_admin.table("evaluations")
             .select("id", count="exact")
@@ -111,6 +141,15 @@ def delete_user(user_id: str) -> tuple[bool, str]:
             )
 
         supabase_admin.auth.admin.delete_user(user_id)
+        log_audit_entry(
+            actor_email=_get_actor_email(),
+            action="Deleted user",
+            detail={
+                "user_id": user_id,
+                "user_email": user_profile.get("email", ""),
+                "role": user_profile.get("role", ""),
+            },
+        )
         return True, ""
     except Exception as e:
         print(f"Error deleting user {user_id}: {e}")
