@@ -1,5 +1,6 @@
 import time
 import threading
+import traceback
 import flet as ft
 from screens.ui_login import main as login_main
 from screens.password_reset import main as reset_password_main
@@ -16,6 +17,7 @@ from utils.utils import (
 )
 from services.session_manager import get_current_user, get_user_role, logout as session_logout
 from widgets.snackbar import show_snackbar
+from widgets.loading_components import screen_skeleton
 
 # Duration (ms) for the fade-out and fade-in halves of the transition.
 _FADE_MS = 150
@@ -48,16 +50,8 @@ class Navigation:
     def show_loading(self):
         """Show loading overlay"""
         self.loading_overlay = ft.Container(
-            content=ft.Column(
-                [
-                    ft.ProgressRing(width=40, height=40, stroke_width=3, color=PRIMARY_BLUE),
-                    ft.Container(height=16),
-                    ft.Text("Loading...", size=14, color=TEXT_SECONDARY),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            bgcolor="#ffffff",
-            alignment=ft.alignment.center,
+            content=screen_skeleton("evaluation"),
+            bgcolor=BG_COLOR,
             expand=True,
         )
         self.page.add(self.loading_overlay)
@@ -379,7 +373,32 @@ class Navigation:
     # ------------------------------------------------------------------
     # Core evaluator content swap with fade transition
     # ------------------------------------------------------------------
-    def _swap_evaluator_content(self, content_loader):
+    def _swap_evaluator_content(self, content_loader, skeleton_kind="evaluation"):
+        """Swap evaluator content on Flet's UI thread."""
+        self._swap_evaluator_content_sync(content_loader, skeleton_kind)
+
+    def _run_evaluator_transition(self, content_loader, skeleton_kind):
+        try:
+            self._swap_evaluator_content_sync(content_loader, skeleton_kind)
+        except Exception as transition_error:
+            print(f"Evaluator transition failed: {transition_error}")
+            traceback.print_exc()
+            self._show_transition_error("The screen could not finish loading.")
+
+    def _show_transition_error(self, message):
+        if self._content_wrapper:
+            self._content_wrapper.content = ft.Container(
+                content=ft.Text(message, color=TEXT_SECONDARY, size=14),
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self._content_wrapper.opacity = 1
+            try:
+                self.page.update()
+            except Exception:
+                pass
+
+    def _swap_evaluator_content_sync(self, content_loader, skeleton_kind="evaluation"):
         """Swap the main content area with a smooth fade transition."""
         self._transition_id += 1
         current_id = self._transition_id
@@ -425,12 +444,14 @@ class Navigation:
                 expand=True,
             )
 
+            # Render the page structure before the destination builds.
+            self._content_wrapper.content = screen_skeleton(skeleton_kind)
+            self.page.controls.append(self._content_wrapper)
+            self.page.update()
+
             # Load screen content – screen sets self.main_content but does NOT page.add()
             content_loader()
             captured_content = self.main_content
-            # Safety: remove from page.controls if the screen added it anyway
-            if captured_content and captured_content in self.page.controls:
-                self.page.controls.remove(captured_content)
                 
             if current_id != self._transition_id:
                 return
@@ -439,15 +460,15 @@ class Navigation:
             if self._content_wrapper:
                 self._content_wrapper.content = captured_content
 
+            # Keep exactly one page-level content control. Some screen code
+            # may still add its root directly during construction.
+            self.page.controls.clear()
+            if self._content_wrapper:
+                self.page.controls.append(self._content_wrapper)
+
             # Build the app bar (sets self.page.appbar)
             self.create_evaluation_app_bar()
             
-            # Append wrapper to page controls (no auto-update)
-            if self._content_wrapper:
-                self.page.controls.append(self._content_wrapper)
-            elif captured_content:
-                self.page.controls.append(captured_content)
-
             # Single atomic update: bgcolor + appbar + content all rendered at once
             self.page.update()
         else:
@@ -464,29 +485,29 @@ class Navigation:
             if current_id != self._transition_id:
                 return
 
+            # Give the skeleton a render pass before synchronous screen setup.
+            self._content_wrapper.content = screen_skeleton(skeleton_kind)
+            self._content_wrapper.opacity = 1
+            self.page.update()
+
             # Update nav button highlights
             self._update_appbar_buttons()
-
-            # Remove any stray controls (keep only our wrapper)
-            stray = [c for c in self.page.controls if c is not self._content_wrapper]
-            for c in stray:
-                self.page.controls.remove(c)
 
             # Load new content
             self.main_content = None
             content_loader()
 
             captured_content = self.main_content
-            if captured_content and captured_content in self.page.controls:
-                self.page.controls.remove(captured_content)
-                
             if current_id != self._transition_id:
                 return
                 
             if self._content_wrapper:
                 self._content_wrapper.content = captured_content
-            elif captured_content:
-                self.page.add(captured_content)
+
+            # Remove any root controls added by the screen during setup.
+            self.page.controls.clear()
+            if self._content_wrapper:
+                self.page.controls.append(self._content_wrapper)
 
             # Fade in
             if self._content_wrapper:
@@ -499,30 +520,33 @@ class Navigation:
     def navigate_to_short_answer(self):
         """Navigate to short answer evaluation screen"""
         self.current_view = "evaluation"
-        self._swap_evaluator_content(lambda: short_answer_main(self.page, self))
+        self._swap_evaluator_content(lambda: short_answer_main(self.page, self), "evaluation")
 
     def navigate_to_essay(self):
         """Navigate to essay evaluation screen"""
         self.current_view = "evaluation"
-        self._swap_evaluator_content(lambda: essay_main(self.page, self))
+        self._swap_evaluator_content(lambda: essay_main(self.page, self), "evaluation")
 
     def navigate_to_code_report(self):
         """Navigate to code report evaluation screen"""
         self.current_view = "evaluation"
-        self._swap_evaluator_content(lambda: code_report_main(self.page, self))
+        self._swap_evaluator_content(lambda: code_report_main(self.page, self), "evaluation")
 
     def navigate_to_dashboard(self):
         """Navigate to dashboard"""
         self.current_view = "dashboard"
-        self._swap_evaluator_content(lambda: dashboard_main(self.page, self, role="evaluator"))
+        self._swap_evaluator_content(lambda: dashboard_main(self.page, self, role="evaluator"), "dashboard")
 
     def navigate_to_new_evaluation(self):
         """Navigate to the evaluation selection screen"""
         self.current_view = "evaluation"
-        self._swap_evaluator_content(lambda: short_answer_main(self.page, self))
+        self._swap_evaluator_content(lambda: short_answer_main(self.page, self), "evaluation")
 
     def navigate_to_account(self):
         """Navigate to evaluator account settings"""
+        self.page.run_thread(self._navigate_to_account_sync)
+
+    def _navigate_to_account_sync(self):
         self._transition_id += 1
         self.current_view = "account"
 
@@ -537,8 +561,12 @@ class Navigation:
         self.is_evaluation_mode = False
         self.app_bar = None
         self._content_wrapper = None
+        loading_skeleton = screen_skeleton("account")
+        self.page.add(loading_skeleton)
+        self.page.update()
         account_main(self.page, self, role="evaluator")
-        if self.main_content and self.main_content not in self.page.controls:
+        self.page.controls.clear()
+        if self.main_content:
             self.page.add(self.main_content)
         self.page.update()
 
@@ -555,7 +583,8 @@ class Navigation:
         self.current_view = "evaluation"
         self._swap_evaluator_content(
             lambda: studenta_result_main(self.page, self, results, academic_prompt, rubric, output_type_label,
-                                          theta1=theta1, theta2=theta2)
+                                          theta1=theta1, theta2=theta2),
+            "results",
         )
 
     def navigate_to_admin(self):

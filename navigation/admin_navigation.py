@@ -3,6 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import time
+import traceback
 import flet as ft
 from screens.ui_admin import main as admin_main
 from screens.ui_admin_settings_audit import main as settings_audit_main
@@ -10,10 +11,11 @@ from screens.ui_admin_submissions import main as submissions_main
 from screens.ui_admin_analytics import main as analytics_main
 from screens.ui_account import main as account_main
 from utils.utils import (
-    CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
+    BG_COLOR, CARD_BG_COLOR, PRIMARY_BLUE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_WHITE,
     BUTTON_PRIMARY_BG, BUTTON_PRIMARY_TEXT, BUTTON_SECONDARY_BG, BUTTON_SECONDARY_TEXT,
     BORDER_COLOR
 )
+from widgets.loading_components import screen_skeleton
 from services.session_manager import get_current_user, logout as session_logout
 
 # Duration (ms) for the fade-out and fade-in halves of the transition.
@@ -356,16 +358,8 @@ class AdminNavigation:
     def show_loading(self):
         """Show loading overlay"""
         self.loading_overlay = ft.Container(
-            content=ft.Column(
-                [
-                    ft.ProgressRing(width=40, height=40, stroke_width=3, color=PRIMARY_BLUE),
-                    ft.Container(height=16),
-                    ft.Text("Loading...", size=14, color=TEXT_SECONDARY),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            bgcolor="#ffffff",
-            alignment=ft.alignment.Alignment(0, 0),
+            content=screen_skeleton("admin_users"),
+            bgcolor=BG_COLOR,
             expand=True,
         )
         self.page.add(self.loading_overlay)
@@ -402,7 +396,32 @@ class AdminNavigation:
                             inner.weight = ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500
                 tab_index += 1
 
-    def _swap_content(self, content_loader):
+    def _swap_content(self, content_loader, skeleton_kind="admin_users"):
+        """Swap admin content on Flet's UI thread."""
+        self._swap_content_sync(content_loader, skeleton_kind)
+
+    def _run_admin_transition(self, content_loader, skeleton_kind):
+        try:
+            self._swap_content_sync(content_loader, skeleton_kind)
+        except Exception as transition_error:
+            print(f"Admin transition failed: {transition_error}")
+            traceback.print_exc()
+            self._show_transition_error("The screen could not finish loading.")
+
+    def _show_transition_error(self, message):
+        if self._content_wrapper:
+            self._content_wrapper.content = ft.Container(
+                content=ft.Text(message, color=TEXT_SECONDARY, size=14),
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self._content_wrapper.opacity = 1
+            try:
+                self.page.update()
+            except Exception:
+                pass
+
+    def _swap_content_sync(self, content_loader, skeleton_kind="admin_users"):
         """Swap only the main content area with a smooth fade transition,
         keeping header and nav bar in place."""
         self._transition_id += 1
@@ -444,11 +463,14 @@ class AdminNavigation:
                 expand=True,
             )
 
+            # Render the page structure before the destination builds.
+            self._content_wrapper.content = screen_skeleton(skeleton_kind)
+            self.page.add(self.admin_header, self.secondary_nav, self._content_wrapper)
+            self.page.update()
+
             # 4. Load content, capture it into the wrapper
             content_loader()
             captured_content = self.main_content
-            if captured_content and captured_content in self.page.controls:
-                self.page.controls.remove(captured_content)
             
             if current_id != self._transition_id:
                 return
@@ -458,13 +480,9 @@ class AdminNavigation:
 
             self.create_admin_app_bar()
             
-            # Now add everything to page in one go
-            self.page.add(self.admin_header, self.secondary_nav)
-            if self._content_wrapper:
-                self.page.add(self._content_wrapper)
-            elif captured_content:
-                # Fallback if wrapper is missing
-                self.page.add(captured_content)
+            # Keep exactly one root for each admin layout region.
+            self.page.controls.clear()
+            self.page.add(self.admin_header, self.secondary_nav, self._content_wrapper)
 
             self.page.update()
         else:
@@ -483,6 +501,11 @@ class AdminNavigation:
             if current_id != self._transition_id:
                 return
 
+            # Give the skeleton a render pass before synchronous tab setup.
+            self._content_wrapper.content = screen_skeleton(skeleton_kind)
+            self._content_wrapper.opacity = 1
+            self.page.update()
+
             # Update tab active states in-place
             self._update_tab_styles()
 
@@ -497,16 +520,16 @@ class AdminNavigation:
 
             # Capture the new content into the wrapper
             captured_content = self.main_content
-            if captured_content and captured_content in self.page.controls:
-                self.page.controls.remove(captured_content)
                 
             if current_id != self._transition_id:
                 return
 
             if self._content_wrapper:
                 self._content_wrapper.content = captured_content
-            elif captured_content:
-                self.page.add(captured_content)
+
+            # Remove any controls a tab may have added directly.
+            self.page.controls.clear()
+            self.page.add(self.admin_header, self.secondary_nav, self._content_wrapper)
 
             # Fade in
             if self._content_wrapper:
@@ -516,25 +539,28 @@ class AdminNavigation:
     def navigate_to_users(self):
         """Navigate to Users tab"""
         self.current_tab = 0
-        self._swap_content(lambda: admin_main(self.page, self))
+        self._swap_content(lambda: admin_main(self.page, self), "admin_users")
 
     def navigate_to_analytics(self):
         """Navigate to Analytics tab"""
         self.current_tab = 1
-        self._swap_content(lambda: analytics_main(self.page, self))
+        self._swap_content(lambda: analytics_main(self.page, self), "admin_analytics")
 
     def navigate_to_submissions(self):
         """Navigate to Submissions tab"""
         self.current_tab = 2
-        self._swap_content(lambda: submissions_main(self.page, self))
+        self._swap_content(lambda: submissions_main(self.page, self), "admin_submissions")
 
     def navigate_to_settings_audit(self):
         """Navigate to Settings & Audit tab"""
         self.current_tab = 3
-        self._swap_content(lambda: settings_audit_main(self.page, self))
+        self._swap_content(lambda: settings_audit_main(self.page, self), "admin_settings")
 
     def navigate_to_account(self):
         """Navigate to account settings screen"""
+        self.page.run_thread(self._navigate_to_account_sync)
+
+    def _navigate_to_account_sync(self):
         self._transition_id += 1
         self.current_tab = -1
 
@@ -549,8 +575,12 @@ class AdminNavigation:
         self.is_admin_mode = False
         self.app_bar = None
         self._content_wrapper = None
+        loading_skeleton = screen_skeleton("account")
+        self.page.add(loading_skeleton)
+        self.page.update()
         account_main(self.page, self, role="admin")
-        if self.main_content and self.main_content not in self.page.controls:
+        self.page.controls.clear()
+        if self.main_content:
             self.page.add(self.main_content)
         self.page.update()
 
