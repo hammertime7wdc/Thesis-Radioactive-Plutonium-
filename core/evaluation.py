@@ -12,11 +12,12 @@ from typing import Dict, List
 class Evaluator:
     """Evaluate student responses against rubric criteria."""
 
-    def __init__(self, embedding_generator, meta_path: str = "qualcheck_short_answers_final_meta.json"):
+    def __init__(self, embedding_generator, meta_path: str):
         """
         Args:
             embedding_generator: Instance of EmbeddingGenerator
-            meta_path: Path to qualcheck_short_answers_final_meta.json (theta1/theta2 live here)
+            meta_path: Path to the model metadata JSON file
+                      (theta1/theta2 live here)
         """
         self.embedding_generator = embedding_generator
 
