@@ -281,33 +281,6 @@ Before testing an evaluation workflow, verify that:
 4. The test user has the correct Supabase role.
 5. PDF files contain selectable text. Scanned image-only PDFs may produce little or no extracted text without OCR.
 
-## Security considerations
+## Security and limitations
 
-- Never commit `.env`, service-role keys, SMTP passwords, model credentials, or session files.
-- Keep Supabase row-level security enabled.
-- Do not use the service-role key in distributed client-side workflows.
-- Treat uploaded PDF content as untrusted input.
-- Review the current SMTP behavior before using the application in production.
-- Remove or rotate test credentials before deployment.
-- Restrict administrator accounts and verify role checks on every administrator route.
-
-## Known limitations
-
-- Email sending is configuration-dependent and is not guaranteed to work without a valid SMTP provider and credentials.
-- PDF extraction depends on selectable text; image-only documents require OCR support that is not currently part of the core processor.
-- Model artifact directories are not included in the repository and must be provisioned separately.
-- The application uses local session storage through `.session.json`; protect the machine and user profile where the application runs.
-- Evaluation quality depends on the fine-tuned checkpoint, threshold metadata, input quality, and rubric quality.
-- Some dependencies in `requirements.txt` support planned or backend integrations and may not be imported by every desktop workflow.
-
-## Documentation
-
-- [`REVIEWER.md`](./REVIEWER.md) contains a codebase review and presentation guide.
-- [`qualcheck_design_spec.md`](./qualcheck_design_spec.md) describes the intended UI design and screen behavior.
-- [`supabase_wiring_instructions.txt`](./supabase_wiring_instructions.txt) describes Supabase integration steps.
-- [`database/supabase_schema.sql`](./database/supabase_schema.sql) defines the database schema and security policies.
-- [Architecture diagram](./.github/modernize/assessment/engines/facts/architecture-diagram.md) documents the application layers and component relationships.
-
-## License
-
-Add the project's license terms here before public distribution.
+QualCheck stores service configuration in environment variables, uses Supabase row-level security and administrator role checks, and processes uploaded PDF files locally before evaluation. Email delivery depends on a valid SMTP configuration, while PDF extraction requires selectable text because OCR is not currently included. Model artifacts must be supplied separately, sessions are stored locally in `.session.json`, and evaluation quality depends on the selected model, threshold metadata, input quality, and rubric quality.
