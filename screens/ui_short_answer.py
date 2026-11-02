@@ -348,7 +348,7 @@ def main(page: ft.Page, nav=None):
             [
                 ft.Icon(ft.Icons.CLOUD_UPLOAD, size=48, color=UPLOAD_TEXT),
                 ft.Container(height=12),
-                ft.Text("Drag & drop PDFs, or browse", size=14, color=UPLOAD_TEXT),
+                ft.Text("Click here to select one or more PDF files.", size=14, color=UPLOAD_TEXT),
                 ft.Container(height=4),
                 ft.Text("Multiple files supported — one per student", size=12, color=UPLOAD_TEXT),
             ],
