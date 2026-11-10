@@ -271,6 +271,25 @@ def main(page: ft.Page, nav=None):
     )
 
     # --- Student Responses Section ---
+    typed_response_label = ft.Text(
+        "Typed Short Answer",
+        size=14,
+        weight=ft.FontWeight.W_600,
+        color=TEXT_PRIMARY,
+    )
+    typed_response_field = ft.TextField(
+        hint_text="Type or paste one short answer here...",
+        multiline=True,
+        min_lines=4,
+        max_lines=8,
+        bgcolor=INPUT_BG,
+        border_color=INPUT_BORDER,
+        text_size=13,
+        color=INPUT_TEXT,
+        hint_style=ft.TextStyle(color=INPUT_HINT),
+        content_padding=ft.padding.all(12),
+    )
+
     responses_label = ft.Row(
         [
             ft.Text("Student Responses", size=14, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
@@ -368,6 +387,20 @@ def main(page: ft.Page, nav=None):
             [
                 responses_label,
                 ft.Container(height=4),
+                ft.Text(
+                    "Each typed answer and PDF is evaluated as a separate submission.",
+                    size=12,
+                    color=TEXT_SECONDARY,
+                ),
+                ft.Container(height=12),
+                typed_response_label,
+                ft.Container(height=6),
+                typed_response_field,
+                ft.Container(height=16),
+                ft.Divider(height=1, color=BORDER_COLOR),
+                ft.Container(height=12),
+                ft.Text("PDF Responses", size=14, weight=ft.FontWeight.W_600, color=TEXT_PRIMARY),
+                ft.Container(height=4),
                 responses_subtitle,
                 ft.Container(height=12),
                 upload_area,
@@ -384,7 +417,8 @@ def main(page: ft.Page, nav=None):
 
     # --- Evaluate Button ---
     def on_evaluate(e):
-        if not selected_files:
+        typed_response = (typed_response_field.value or "").strip()
+        if not selected_files and not typed_response:
             return
 
         rubric = [
@@ -431,18 +465,35 @@ def main(page: ft.Page, nav=None):
                 evaluator = _get_evaluator()
                 supabase = get_supabase_client()
 
+                submissions = [
+                    {"kind": "typed", "name": "Typed short answer", "response": typed_response}
+                ] if typed_response else []
+                submissions.extend(
+                    {"kind": "pdf", "name": f.get("name", "Document"), "file": f}
+                    for f in selected_files
+                )
+
                 results = []
-                total_files = len(selected_files)
-                for idx, f in enumerate(selected_files):
-                    file_name = f.get("name", "Document")
-                    pct = idx / total_files
+                total_submissions = len(submissions)
+                for idx, submission in enumerate(submissions):
+                    file_name = submission["name"]
+                    pct = idx / total_submissions
                     progress_dialog.update_progress(
-                        status=f"Evaluating response {idx + 1} of {total_files}",
+                        status=f"Evaluating response {idx + 1} of {total_submissions}",
                         detail=file_name,
                         progress_pct=pct,
                     )
 
-                    response_text = _pdf_processor.extract_text(f["path"])
+                    if submission["kind"] == "typed":
+                        response_text = submission["response"]
+                        source_name = "Typed short answer"
+                        source_path = None
+                    else:
+                        source_file = submission["file"]
+                        response_text = _pdf_processor.extract_text(source_file["path"])
+                        source_name = source_file["name"]
+                        source_path = source_file["path"]
+
                     scores = evaluator.evaluate_combined(
                         question=question_text,
                         student_response=response_text,
@@ -454,9 +505,9 @@ def main(page: ft.Page, nav=None):
                     classification = evaluator.classify(overall_similarity)
 
                     result_record = {
-                        "name": os.path.splitext(f["name"])[0],
-                        "file": f["name"],
-                        "file_path": f["path"],
+                        "name": os.path.splitext(source_name)[0],
+                        "file": source_name,
+                        "file_path": source_path,
                         "score": overall_pct,
                         "similarity_score": overall_similarity,
                         "classification": classification,
@@ -478,8 +529,8 @@ def main(page: ft.Page, nav=None):
                                     "output_type": "short_answer",
                                     "similarity_score": overall_similarity,
                                     "classification": classification,
-                                    "file_name": f["name"],
-                                    "file_path": f["path"],
+                                    "file_name": source_name,
+                                    "file_path": source_path,
                                     "criterion_scores": {
                                         name: round(v["similarity"], 4) for name, v in scores.items()
                                     },
@@ -490,7 +541,7 @@ def main(page: ft.Page, nav=None):
                                 }
                             ).execute()
                         except Exception as db_error:
-                            print(f"Failed to save short answer evaluation for {f['name']}: {db_error}")
+                            print(f"Failed to save short answer evaluation for {source_name}: {db_error}")
 
                 progress_dialog.update_progress(
                     status="Finalizing results...",
@@ -545,7 +596,7 @@ def main(page: ft.Page, nav=None):
             and (criterion1_field.value or "").strip()
             and (criterion2_field.value or "").strip()
             and (criterion3_field.value or "").strip()
-            and selected_files
+            and (selected_files or (typed_response_field.value or "").strip())
         )
         evaluate_btn.disabled = not is_valid
         evaluate_btn.style = ft.ButtonStyle(
@@ -559,9 +610,10 @@ def main(page: ft.Page, nav=None):
     criterion1_field.on_change = update_evaluate_button_state
     criterion2_field.on_change = update_evaluate_button_state
     criterion3_field.on_change = update_evaluate_button_state
+    typed_response_field.on_change = update_evaluate_button_state
 
     evaluate_instruction = ft.Text(
-        "Complete all rubric criteria, upload at least one PDF, and enter a prompt to continue.",
+        "Complete all rubric criteria and enter a prompt. Each typed answer and PDF is evaluated separately.",
         size=12,
         color=TEXT_SECONDARY,
     )
