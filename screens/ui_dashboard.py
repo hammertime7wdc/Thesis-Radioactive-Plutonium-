@@ -424,16 +424,17 @@ def main(page: ft.Page, nav=None, role="evaluator"):
         output_type_label = OUTPUT_TYPE_LABELS.get(evaluation.get("output_type"), evaluation.get("output_type") or "—")
         title = evaluation.get("file_name") or (evaluation.get("prompt") or "")[:60] or "Untitled"
         result, rubric = _saved_evaluation_to_result(evaluation)
+        result_classification = result["classification"]
+        result_color = {
+            "Fully Relevant": SUCCESS,
+            "Partially Relevant": WARNING,
+            "Irrelevant": ERROR,
+        }.get(result_classification, TEXT_SECONDARY)
         expanded = {"value": False}
         arrow_icon = ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=18, color=TEXT_SECONDARY)
 
         criterion_rows = []
         for criterion_name, criterion_pct in result["criteria"]:
-            criterion_color = (
-                SUCCESS if criterion_pct >= 75
-                else WARNING if criterion_pct >= 50
-                else ERROR
-            )
             criterion_rows.append(
                 ft.Row(
                     [
@@ -441,7 +442,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                         ft.ProgressBar(
                             value=criterion_pct / 100,
                             bgcolor=SECTION_BG_COLOR,
-                            color=criterion_color,
+                            color=result_color,
                             height=7,
                             border_radius=4,
                             expand=True,
@@ -485,13 +486,13 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                                             f"{result['score']:.1f}%",
                                             size=28,
                                             weight=ft.FontWeight.BOLD,
-                                            color=classification_badge(evaluation.get("classification")).content.color,
+                                            color=classification_badge(result_classification).content.color,
                                         ),
                                         ft.Text(
-                                            evaluation.get("classification") or "—",
+                                            result_classification or "—",
                                             size=12,
                                             weight=ft.FontWeight.W_600,
-                                            color=classification_badge(evaluation.get("classification")).content.color,
+                                            color=classification_badge(result_classification).content.color,
                                         ),
                                         ft.Text("Similarity Score", size=11, color=TEXT_SECONDARY),
                                     ],
@@ -576,7 +577,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                         size=13, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY, width=60,
                         text_align=ft.TextAlign.RIGHT,
                     ),
-                    classification_badge(evaluation.get("classification")),
+                    classification_badge(result_classification),
                     arrow_icon,
                 ],
                 spacing=12,
