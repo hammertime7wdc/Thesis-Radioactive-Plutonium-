@@ -28,6 +28,7 @@ nltk>=3.8.0
 spacy>=3.6.0
 datasets>=2.14.0
 pypdf>=4.0.0
+reportlab>=4.0.0
 
 # ============================================================================
 # MACHINE LEARNING METRICS (From Jupyter Notebooks)
