@@ -36,4 +36,5 @@ codereport_bert/
 analysis/
 QUALCHECK_TESTER/
 .github/
+bar_chart.py
 
