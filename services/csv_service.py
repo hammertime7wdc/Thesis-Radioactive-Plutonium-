@@ -1,5 +1,13 @@
 import csv
 
+
+def _format_submission_date(value):
+    """Return a compact date that spreadsheet applications can display safely."""
+    if not value:
+        return ""
+    return str(value).strip()[:10]
+
+
 def export_submissions_to_csv(submissions, file_path):
     """
     Exports submission list data to a specified CSV file path.
@@ -19,6 +27,7 @@ def export_submissions_to_csv(submissions, file_path):
                 # Format classification list to comma-separated text if needed
                 if isinstance(row.get("classification"), list):
                     row["classification"] = ", ".join(row["classification"])
+                row["date"] = _format_submission_date(row.get("date"))
                 writer.writerow({k: row.get(k, "") for k in fieldnames})
         return True
     except Exception as err:
