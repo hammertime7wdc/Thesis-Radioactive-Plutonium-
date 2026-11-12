@@ -15,6 +15,12 @@ from utils.utils import (
 from services.submissions_services import fetch_submissions
 from services.csv_service import export_submissions_to_csv
 
+MODEL_THRESHOLDS = {
+    "Short Answer": (0.4527311068773271, 0.32273110687732703),
+    "Essay": (0.9117047917842875, 0.5117047917842872),
+    "Code Report": (0.8286900317668924, 0.4886900317668921),
+}
+
 
 def main(page: ft.Page, nav=None):
     page.title = "QualCheck Admin - Submissions"
@@ -73,7 +79,7 @@ def main(page: ft.Page, nav=None):
     def classification_badge(label):
         colors = {
             "Fully Relevant": (SUCCESS, "#dcfce7"),
-            "Partially Relevant": ("#ca8a04", "#fef9c3"),
+            "Partially Relevant": (WARNING, "#fef3c7"),
             "Irrelevant": (ERROR, "#fee2e2"),
         }
         text_color, bg_color = colors.get(label, (TEXT_SECONDARY, SECTION_BG_COLOR))
@@ -114,6 +120,7 @@ def main(page: ft.Page, nav=None):
             "Irrelevant": ERROR,
         }
         score_color = classification_colors.get(classification, PRIMARY_BLUE)
+        thresholds = MODEL_THRESHOLDS.get(item.get("type"))
 
         criterion_rows = []
         for name, value in (item.get("criterion_scores") or {}).items():
@@ -121,7 +128,17 @@ def main(page: ft.Page, nav=None):
                 score_pct = float(value) * 100 if float(value) <= 1 else float(value)
             except (TypeError, ValueError):
                 continue
-            criterion_color = SUCCESS if score_pct >= 75 else WARNING if score_pct >= 50 else ERROR
+            if thresholds:
+                theta1, theta2 = thresholds
+                criterion_color = (
+                    SUCCESS
+                    if score_pct / 100 >= theta1
+                    else WARNING
+                    if score_pct / 100 >= theta2
+                    else ERROR
+                )
+            else:
+                criterion_color = score_color
             criterion_rows.append(
                 ft.Row(
                     [
@@ -206,8 +223,19 @@ def main(page: ft.Page, nav=None):
                 [
                     ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=18, color=TEXT_TERTIARY),
                     ft.Text(item["file"], size=13, color=TEXT_PRIMARY, expand=True),
-                    ft.Text(item["score"], size=13, weight=ft.FontWeight.W_600, color=PRIMARY_BLUE, width=60),
-                    classification_badge(classification),
+                    ft.Text(
+                        item["score"],
+                        size=13,
+                        weight=ft.FontWeight.W_600,
+                        color=score_color,
+                        width=90,
+                        text_align=ft.TextAlign.RIGHT,
+                    ),
+                    ft.Container(
+                        content=classification_badge(classification),
+                        width=125,
+                        alignment=ft.alignment.center_left,
+                    ),
                     ft.Text(item["type"], size=13, color=TEXT_SECONDARY, width=100),
                     ft.Text(item["evaluator"], size=13, color=TEXT_SECONDARY, width=120),
                     ft.Text(item["date"], size=13, color=TEXT_SECONDARY, width=120),
@@ -305,7 +333,7 @@ def main(page: ft.Page, nav=None):
             ft.Container(width=4),
             pills["Irrelevant"],
         ],
-        visible=False,  # Hidden by default
+        visible=True,
         animate_opacity=200,
     )
 
@@ -326,7 +354,8 @@ def main(page: ft.Page, nav=None):
     def on_csv_result(e: ft.FilePickerResultEvent):
         if e.path:
             current_data = get_filtered_data()
-            success = export_submissions_to_csv(current_data, e.path)
+            output_path = e.path if e.path.lower().endswith(".csv") else f"{e.path}.csv"
+            success = export_submissions_to_csv(current_data, output_path)
             
             snack_message = "CSV exported successfully!" if success else "Failed to export CSV."
             snack_color = SUCCESS if success else ERROR
@@ -354,14 +383,11 @@ def main(page: ft.Page, nav=None):
                 ft.Icon(ft.Icons.DOWNLOAD, size=16, color=TEXT_WHITE),
                 ft.Text("Export CSV", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
             ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=4,
+            spacing=8,
         ),
-        width=130,
-        height=40,
-        border_radius=20,
         bgcolor="#22c55e",
-        alignment=ft.alignment.center,
+        border_radius=8,
+        padding=ft.padding.symmetric(horizontal=16, vertical=10),
         on_click=on_export_csv,
         ink=True,
     )
@@ -386,8 +412,17 @@ def main(page: ft.Page, nav=None):
     submissions_header = ft.Container(
         content=ft.Row(
             [
+                ft.Container(width=18),
                 ft.Text("STUDENT FILE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, expand=True),
-                ft.Text("SCORE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=60),
+                ft.Text(
+                    "SIMILARITY",
+                    size=11,
+                    weight=ft.FontWeight.BOLD,
+                    color=TEXT_TERTIARY,
+                    width=90,
+                    no_wrap=True,
+                    text_align=ft.TextAlign.RIGHT,
+                ),
                 ft.Text("CLASSIFICATION", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=125),
                 ft.Text("TYPE", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=100),
                 ft.Text("EVALUATOR", size=11, weight=ft.FontWeight.BOLD, color=TEXT_TERTIARY, width=120),

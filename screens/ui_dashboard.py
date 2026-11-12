@@ -23,6 +23,11 @@ OUTPUT_TYPE_LABELS = {
     "code_report": "Code Report",
 }
 OUTPUT_TYPE_KEYS = {label: key for key, label in OUTPUT_TYPE_LABELS.items()}
+MODEL_THRESHOLDS = {
+    "short_answer": (0.4527311068773271, 0.32273110687732703),
+    "essay": (0.9117047917842875, 0.5117047917842872),
+    "code_report": (0.8286900317668924, 0.4886900317668921),
+}
 
 
 def _fetch_user_evaluations(user_id: str) -> list:
@@ -430,11 +435,24 @@ def main(page: ft.Page, nav=None, role="evaluator"):
             "Partially Relevant": WARNING,
             "Irrelevant": ERROR,
         }.get(result_classification, TEXT_SECONDARY)
+        thresholds = MODEL_THRESHOLDS.get(evaluation.get("output_type"))
         expanded = {"value": False}
         arrow_icon = ft.Icon(ft.Icons.KEYBOARD_ARROW_DOWN, size=18, color=TEXT_SECONDARY)
 
         criterion_rows = []
         for criterion_name, criterion_pct in result["criteria"]:
+            criterion_score = criterion_pct / 100
+            if thresholds:
+                theta1, theta2 = thresholds
+                criterion_color = (
+                    SUCCESS
+                    if criterion_score >= theta1
+                    else WARNING
+                    if criterion_score >= theta2
+                    else ERROR
+                )
+            else:
+                criterion_color = result_color
             criterion_rows.append(
                 ft.Row(
                     [
@@ -442,7 +460,7 @@ def main(page: ft.Page, nav=None, role="evaluator"):
                         ft.ProgressBar(
                             value=criterion_pct / 100,
                             bgcolor=SECTION_BG_COLOR,
-                            color=result_color,
+                            color=criterion_color,
                             height=7,
                             border_radius=4,
                             expand=True,
