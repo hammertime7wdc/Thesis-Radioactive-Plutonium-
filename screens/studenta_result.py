@@ -13,6 +13,12 @@ from utils.utils import (
     BUTTON_SECONDARY_BORDER,
     SUCCESS, WARNING, ERROR, INFO,
 )
+from services.report_service import (
+    export_evaluation_to_pdf,
+    export_evaluations_to_pdf,
+    export_evaluations_to_csv,
+    safe_export_name,
+)
 
 # Extra accent used only on this screen (Top Score stat card)
 PURPLE = "#8b5cf6"
@@ -87,6 +93,176 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
     partial = sum(1 for s in students if resolve_label(s)[0] == "Partially Relevant")
     irrelevant = sum(1 for s in students if resolve_label(s)[0] == "Irrelevant")
 
+    export_state = {"mode": None, "student": None, "sort": "score"}
+
+    def report_record(student):
+        return {
+            "file_name": student.get("file") or student.get("name") or "Untitled",
+            "output_type": output_type_label,
+            "classification": resolve_label(student)[0],
+            "similarity_score": float(student.get("score", 0.0)) / 100,
+            "criterion_scores": {
+                name: float(value) / 100
+                for name, value in student.get("criteria", [])
+            },
+            "prompt": prompt_text,
+            "rubric_details": [
+                {"name": name, "description": description}
+                for name, description in rubric_items_data
+            ],
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    def on_export_result(e: ft.FilePickerResultEvent):
+        if not e.path:
+            return
+        ordered_students = sorted(
+            students,
+            key=(
+                (lambda student: student.get("name", "").lower())
+                if export_state["sort"] == "name"
+                else (lambda student: -float(student.get("score", 0.0)))
+            ),
+        )
+        mode = export_state["mode"]
+        if mode == "csv":
+            output_path = e.path if e.path.lower().endswith(".csv") else f"{e.path}.csv"
+            success = export_evaluations_to_csv(
+                [report_record(student) for student in ordered_students],
+                output_path,
+            )
+            message = "CSV exported successfully." if success else "CSV export failed."
+        elif mode == "pdf_all":
+            output_path = e.path if e.path.lower().endswith(".pdf") else f"{e.path}.pdf"
+            success = export_evaluations_to_pdf(
+                [report_record(student) for student in ordered_students],
+                output_path,
+            )
+            message = "PDF exported successfully." if success else "PDF export failed."
+        else:
+            output_path = e.path if e.path.lower().endswith(".pdf") else f"{e.path}.pdf"
+            success = export_evaluation_to_pdf(
+                report_record(export_state["student"]),
+                output_path,
+            )
+            message = "PDF exported successfully." if success else "PDF export failed."
+        page.snack_bar = ft.SnackBar(
+            content=ft.Text(message, color=TEXT_WHITE),
+            bgcolor=SUCCESS if success else ERROR,
+        )
+        page.snack_bar.open = True
+        page.update()
+
+    export_picker = ft.FilePicker(on_result=on_export_result)
+    page.overlay.append(export_picker)
+
+    def export_student_pdf(student):
+        export_state["mode"] = "pdf"
+        export_state["student"] = student
+        export_picker.save_file(
+            dialog_title="Download evaluation report",
+            file_name=safe_export_name(student.get("name"), ".pdf"),
+            allowed_extensions=["pdf"],
+        )
+
+    def export_results_csv(e):
+        export_state["mode"] = "csv"
+        export_state["student"] = None
+        show_export_order_dialog()
+
+    def export_results_pdf(e):
+        export_state["mode"] = "pdf_all"
+        export_state["student"] = None
+        show_export_order_dialog()
+
+    def show_export_order_dialog():
+        export_format = "CSV" if export_state["mode"] == "csv" else "PDF"
+
+        def choose_order(order):
+            def handler(e):
+                export_state["sort"] = order
+                page.close(export_order_dialog)
+                if export_state["mode"] == "csv":
+                    export_picker.save_file(
+                        dialog_title="Download evaluation results",
+                        file_name="qualcheck_evaluation_results.csv",
+                        allowed_extensions=["csv"],
+                    )
+                else:
+                    export_picker.save_file(
+                        dialog_title="Download all evaluation results",
+                        file_name="qualcheck_evaluation_results.pdf",
+                        allowed_extensions=["pdf"],
+                    )
+            return handler
+
+        export_order_dialog = ft.AlertDialog(
+            modal=True,
+            shape=ft.RoundedRectangleBorder(radius=18),
+            bgcolor=CARD_BG_COLOR,
+            content_padding=ft.padding.all(20),
+            content=ft.Container(
+                width=320,
+                height=112,
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            f"Export {export_format}",
+                            size=18,
+                            weight=ft.FontWeight.BOLD,
+                            color=TEXT_PRIMARY,
+                        ),
+                        ft.Text(
+                            "Choose the result order.",
+                            size=12,
+                            color=TEXT_SECONDARY,
+                        ),
+                        ft.Container(height=14),
+                        ft.Row(
+                            [
+                                ft.ElevatedButton(
+                                    "Name",
+                                    icon=ft.Icons.SORT_BY_ALPHA,
+                                    on_click=choose_order("name"),
+                                    style=ft.ButtonStyle(
+                                        bgcolor=BUTTON_SECONDARY_BG,
+                                        color=TEXT_PRIMARY,
+                                        side=ft.BorderSide(1, BORDER_COLOR),
+                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                    ),
+                                    expand=True,
+                                ),
+                                ft.ElevatedButton(
+                                    "Score",
+                                    icon=ft.Icons.SORT,
+                                    on_click=choose_order("score"),
+                                    style=ft.ButtonStyle(
+                                        bgcolor=PRIMARY_BLUE,
+                                        color=TEXT_WHITE,
+                                        shape=ft.RoundedRectangleBorder(radius=8),
+                                    ),
+                                    expand=True,
+                                ),
+                            ],
+                            spacing=8,
+                        ),
+                        ft.Container(expand=True),
+                        ft.Row(
+                            [
+                                ft.Container(expand=True),
+                                ft.TextButton(
+                                    "Cancel",
+                                    on_click=lambda e: page.close(export_order_dialog),
+                                ),
+                            ],
+                        ),
+                    ],
+                    spacing=0,
+                ),
+            ),
+        )
+        page.open(export_order_dialog)
+
     # -----------------------------------------------------------------
     # Header
     # -----------------------------------------------------------------
@@ -99,6 +275,40 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
                 nav.navigate_to_new_evaluation()
             else:
                 nav.navigate_to_short_answer()
+
+    header_buttons = ft.Row(
+        [
+            ft.Container(
+                content=                ft.Row(
+                    [
+                    ft.Icon(ft.Icons.DOWNLOAD, size=16, color=TEXT_WHITE),
+                    ft.Text("Export CSV", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
+                ],
+                spacing=8,
+                ),
+                bgcolor="#22c55e",
+                border_radius=8,
+                padding=ft.padding.symmetric(horizontal=16, vertical=10),
+                on_click=export_results_csv,
+                ink=True,
+            ),
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.PICTURE_AS_PDF, size=16, color=TEXT_WHITE),
+                        ft.Text("Export PDF", size=13, weight=ft.FontWeight.W_600, color=TEXT_WHITE),
+                    ],
+                    spacing=8,
+                ),
+                bgcolor=PRIMARY_BLUE,
+                border_radius=8,
+                padding=ft.padding.symmetric(horizontal=16, vertical=10),
+                on_click=export_results_pdf,
+                ink=True,
+            ),
+        ],
+        spacing=12,
+    )
 
     header = ft.Container(
         content=ft.Row(
@@ -127,6 +337,7 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
                     ],
                     spacing=0,
                 ),
+                header_buttons,
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.START,
@@ -334,12 +545,8 @@ def main(page: ft.Page, nav=None, results=None, academic_prompt=None, rubric=Non
     def criterion_row(label, pct):
         # Use the model's REAL calibrated theta1/theta2 (per-criterion similarity
         # is a raw 0-1 cosine score, same scale the classifier itself uses) instead
-        # of a hardcoded 75/50 split. Previously this used a generic 75/50 cutoff
-        # completely disconnected from the actual model thresholds, so a criterion
-        # could render green/"good" while still sitting well below what the model
-        # requires for Fully Relevant — misleading given the overall label uses
-        # the real thresholds. Falls back to 75/50 only if theta1/theta2 weren't
-        # passed in (e.g. an older caller), so this never hard-crashes.
+        # of a hardcoded 75/50 split. Falls back to 75/50 only if theta1/theta2
+        # weren't passed in (e.g. an older caller), so this never hard-crashes.
         t1 = theta1 * 100 if theta1 is not None else 75
         t2 = theta2 * 100 if theta2 is not None else 50
         color = SUCCESS if pct >= t1 else (WARNING if pct >= t2 else ERROR)
